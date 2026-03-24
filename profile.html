@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Library | Profile</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="profile.css">
+</head>
+<body class="page app-page" data-page="profile">
+  <div class="loader-overlay" id="loaderOverlay" aria-hidden="true">
+    <div class="loader-core"></div>
+    <p>Loading your profile...</p>
+  </div>
+
+  <div class="app-shell page-shell">
+    <aside class="sidebar glass-panel" id="sidebar">
+      <div class="sidebar-head">
+        <span class="brand-pill">E-Library</span>
+        <h2>Reading Suite</h2>
+        <p>Your profile, favorite stories, and custom edits all in one place.</p>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Primary">
+        <a href="home.html" class="nav-item" data-route>Home</a>
+        <a href="profile.html" class="nav-item active" data-route>Profile</a>
+        <a href="home.html#librarySection" class="nav-item" data-route>Story</a>
+        <button type="button" class="nav-item logout-link" data-logout>Logout</button>
+      </nav>
+
+      <div class="sidebar-foot glass-inner">
+        <span class="eyebrow">Saved activity</span>
+        <strong>Reader Overview</strong>
+        <p>Track favorite books, personalized edits, and your reading identity at a glance.</p>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <section class="app-content">
+      <header class="topbar glass-panel">
+        <div class="topbar-left">
+          <button type="button" class="icon-btn" id="sidebarToggle" aria-label="Toggle sidebar" aria-expanded="false">&#9776;</button>
+          <div>
+            <p class="eyebrow">Profile</p>
+            <h1>Your reading identity</h1>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="user-chip">
+            <div class="avatar-badge large-avatar" data-user-initial></div>
+            <div>
+              <span>Profile owner</span>
+              <strong data-username></strong>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="profile-grid">
+        <article class="hero-card feature-hero glass-panel">
+          <p class="eyebrow">Member Profile</p>
+          <h2 data-username></h2>
+          <p id="memberSince">Member since recently</p>
+          <div class="hero-actions">
+            <a href="home.html" class="primary-btn" data-route>Return Home</a>
+            <button type="button" class="secondary-btn" data-logout>Logout</button>
+          </div>
+        </article>
+
+        <article class="stat-card glass-panel">
+          <span>Total Shelf</span>
+          <strong id="profileTotalBooks">0</strong>
+          <p>Stories currently available in your library.</p>
+        </article>
+
+        <article class="stat-card glass-panel">
+          <span>Favorites Saved</span>
+          <strong id="profileFavoriteBooks">0</strong>
+          <p>Books you marked for quick return.</p>
+        </article>
+
+        <article class="stat-card glass-panel">
+          <span>Custom Edits</span>
+          <strong id="profileEditedBooks">0</strong>
+          <p>Stories personalized in the reader.</p>
+        </article>
+      </section>
+
+      <section class="section-panel glass-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Favorite Books</p>
+            <h2>Your saved collection</h2>
+          </div>
+        </div>
+
+        <div class="books-grid compact-grid" id="favoriteBooksGrid"></div>
+        <div class="empty-state hidden" id="favoriteEmptyState">
+          <h3>No favorites yet</h3>
+          <p>Tap the heart icon on any book from the dashboard to save it here.</p>
+        </div>
+      </section>
+
+      <section class="section-panel glass-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Edited Stories</p>
+            <h2>Your recent customizations</h2>
+          </div>
+        </div>
+
+        <div class="edited-list" id="editedBooksList"></div>
+        <div class="empty-state hidden" id="editedEmptyState">
+          <h3>No story edits saved</h3>
+          <p>Open a book, edit the story, and save your version to see it here.</p>
+        </div>
+      </section>
+    </section>
+
+    <nav class="mobile-nav glass-panel" aria-label="Mobile">
+      <a href="home.html" class="mobile-nav-item" data-route>Home</a>
+      <a href="profile.html" class="mobile-nav-item active" data-route>Profile</a>
+      <a href="home.html#librarySection" class="mobile-nav-item" data-route>Story</a>
+      <button type="button" class="mobile-nav-item" data-logout>Logout</button>
+    </nav>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="supabase-config.js" defer></script>
+  <script src="app-core.js" defer></script>
+  <script src="profile.js" defer></script>
+</body>
+</html>

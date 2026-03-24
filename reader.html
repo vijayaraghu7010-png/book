@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Library | Reader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="reader.css">
+</head>
+<body class="page app-page reader-page" data-page="reader">
+  <div class="loader-overlay" id="loaderOverlay" aria-hidden="true">
+    <div class="loader-core"></div>
+    <p>Opening your story...</p>
+  </div>
+
+  <main class="reader-shell page-shell">
+    <header class="reader-topbar glass-panel">
+      <div class="reader-heading-row">
+        <a href="home.html" class="secondary-btn" data-route>Back to Library</a>
+        <div>
+          <p class="eyebrow">Story Reader</p>
+          <h1 id="readerTitle">Loading story...</h1>
+        </div>
+      </div>
+
+      <div class="reader-actions-row">
+        <span class="status-pill" id="readerModeStatus">Viewing</span>
+
+        <div class="menu-box">
+          <button type="button" class="icon-btn" id="menuToggle" aria-label="Open reader menu" aria-expanded="false">&#8942;</button>
+          <div class="menu-dropdown glass-panel" id="readerMenu">
+            <button type="button" data-action="edit">Edit story</button>
+            <button type="button" data-action="save">Save changes</button>
+            <button type="button" data-action="image">Insert image</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="reader-panel glass-panel">
+      <div class="reader-toolbar">
+        <div class="reader-toolbar-actions">
+          <button type="button" class="secondary-btn" id="toggleEditorBtn">Toggle Editor</button>
+          <button type="button" class="secondary-btn" id="insertImageBtn">Insert Image</button>
+        </div>
+        <span class="save-note" id="saveNote">Your edits and inserted images are stored locally in this browser.</span>
+        <input type="file" id="imageUpload" accept="image/*" hidden>
+      </div>
+
+      <section class="editor-panel" id="editorPanel">
+        <label for="storyEditor">Story editor</label>
+        <textarea id="storyEditor" placeholder="Edit your story here..."></textarea>
+        <div class="editor-actions">
+          <button type="button" class="primary-btn" id="saveStoryBtn">Save Changes</button>
+        </div>
+      </section>
+
+      <article class="story-content" id="storyContent"></article>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="supabase-config.js" defer></script>
+  <script src="app-core.js" defer></script>
+  <script src="reader.js" defer></script>
+</body>
+</html>

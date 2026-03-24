@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Library | Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="index.css">
+</head>
+<body class="page login-page" data-page="login">
+  <div class="loader-overlay" id="loaderOverlay" aria-hidden="true">
+    <div class="loader-core"></div>
+    <p>Opening your reading room...</p>
+  </div>
+
+  <main class="login-shell page-shell">
+    <section class="login-layout glass-panel">
+      <div class="login-copy">
+        <div class="login-copy-main">
+          <span class="brand-pill">E-Library</span>
+          <p class="eyebrow">Premium Digital Reading Lounge</p>
+          <h1>Read beautifully. Organize effortlessly.</h1>
+          <p class="lead-copy">
+            Discover immersive fiction, save favorite stories, personalize your reading experience, and continue every chapter from a polished private dashboard.
+          </p>
+        </div>
+
+        <div class="quote-card">
+          <p class="quote-label">Reading spark</p>
+          <blockquote id="quoteText"></blockquote>
+        </div>
+
+        <div class="login-stats">
+          <article class="mini-stat">
+            <strong>10+</strong>
+            <span>Curated stories</span>
+          </article>
+          <article class="mini-stat">
+            <strong>Editable</strong>
+            <span>Reader workspace</span>
+          </article>
+          <article class="mini-stat">
+            <strong>Synced</strong>
+            <span>Local saved progress</span>
+          </article>
+        </div>
+      </div>
+
+      <form class="login-form glass-inner" id="loginForm" autocomplete="on">
+        <div class="form-heading">
+          <p class="eyebrow">Member Access</p>
+          <h2>Welcome back</h2>
+          <p>Sign in to open your dashboard, story reader, favorites, and saved edits.</p>
+        </div>
+
+        <label class="input-group">
+          <span>Username</span>
+          <input type="text" id="usernameInput" name="username" placeholder="Enter your username" autocomplete="username" required>
+        </label>
+
+        <label class="input-group">
+          <span>Password</span>
+          <input type="password" id="passwordInput" name="password" placeholder="Enter your password" autocomplete="current-password" required>
+        </label>
+
+        <button type="submit" class="primary-btn wide-btn">Enter Library</button>
+
+        <p class="form-footnote">
+          Your username, password, and session state are stored locally in this browser for a smooth return experience.
+        </p>
+      </form>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="supabase-config.js" defer></script>
+  <script src="auth-core.js" defer></script>
+  <script src="index.js" defer></script>
+</body>
+</html>

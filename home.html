@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Library | Home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="home.css">
+</head>
+<body class="page app-page" data-page="home">
+  <div class="loader-overlay" id="loaderOverlay" aria-hidden="true">
+    <div class="loader-core"></div>
+    <p>Preparing your dashboard...</p>
+  </div>
+
+  <div class="app-shell page-shell">
+    <aside class="sidebar glass-panel" id="sidebar">
+      <div class="sidebar-head">
+        <span class="brand-pill">E-Library</span>
+        <h2>Reading Suite</h2>
+        <p>Curated stories, saved favorites, and your own edits in one elegant space.</p>
+      </div>
+
+      <nav class="sidebar-nav" aria-label="Primary">
+        <a href="home.html" class="nav-item active" data-route>Home</a>
+        <a href="profile.html" class="nav-item" data-route>Profile</a>
+        <a href="#librarySection" class="nav-item">Story</a>
+        <button type="button" class="nav-item logout-link" data-logout>Logout</button>
+      </nav>
+
+      <div class="sidebar-foot glass-inner">
+        <span class="eyebrow">Reading mode</span>
+        <strong>Evening Collection</strong>
+        <p>Search, favorite, and open stories with smooth transitions across desktop and mobile.</p>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <section class="app-content">
+      <header class="topbar glass-panel">
+        <div class="topbar-left">
+          <button type="button" class="icon-btn" id="sidebarToggle" aria-label="Toggle sidebar" aria-expanded="false">&#9776;</button>
+          <div>
+            <p class="eyebrow">Dashboard</p>
+            <h1>Find your next story</h1>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <label class="search-field" for="searchInput">
+            <span class="search-icon">&#128269;</span>
+            <input type="search" id="searchInput" placeholder="Search books by title">
+          </label>
+
+          <div class="user-chip">
+            <div class="avatar-badge" data-user-initial></div>
+            <div>
+              <span>Signed in as</span>
+              <strong data-username></strong>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="hero-grid">
+        <article class="hero-card feature-hero glass-panel">
+          <p class="eyebrow">Personal Shelf</p>
+          <h2>Welcome back, <span data-username></span>.</h2>
+          <p>
+            Explore premium fiction, reopen your saved edits, and build a favorites list you can revisit in seconds.
+          </p>
+          <div class="hero-actions">
+            <a href="#librarySection" class="primary-btn">Browse Stories</a>
+            <a href="profile.html" class="secondary-btn" data-route>Open Profile</a>
+          </div>
+        </article>
+
+        <article class="stat-card glass-panel">
+          <span>Total Books</span>
+          <strong id="totalBooksStat">0</strong>
+          <p>Stories available to read right now.</p>
+        </article>
+
+        <article class="stat-card glass-panel">
+          <span>Favorites</span>
+          <strong id="favoriteBooksStat">0</strong>
+          <p>Books saved to your quick-return list.</p>
+        </article>
+
+        <article class="stat-card glass-panel">
+          <span>Edited Stories</span>
+          <strong id="editedBooksStat">0</strong>
+          <p>Reader customizations stored locally.</p>
+        </article>
+      </section>
+
+      <section class="section-panel glass-panel" id="librarySection">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Library Collection</p>
+            <h2>Featured stories</h2>
+          </div>
+
+          <div class="filter-group">
+            <button type="button" class="filter-chip active" id="showAllBooks">All Books</button>
+            <button type="button" class="filter-chip" id="showFavoriteBooks">Favorites</button>
+          </div>
+        </div>
+
+        <div class="books-grid" id="booksGrid"></div>
+        <div class="empty-state hidden" id="booksEmptyState">
+          <h3>No stories found</h3>
+          <p>Try another title or switch back to the full collection.</p>
+        </div>
+      </section>
+    </section>
+
+    <nav class="mobile-nav glass-panel" aria-label="Mobile">
+      <a href="home.html" class="mobile-nav-item active" data-route>Home</a>
+      <a href="profile.html" class="mobile-nav-item" data-route>Profile</a>
+      <a href="#librarySection" class="mobile-nav-item">Story</a>
+      <button type="button" class="mobile-nav-item" data-logout>Logout</button>
+    </nav>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="supabase-config.js" defer></script>
+  <script src="app-core.js" defer></script>
+  <script src="home.js" defer></script>
+</body>
+</html>
