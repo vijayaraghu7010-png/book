@@ -594,6 +594,8 @@ body.page-leaving .page-shell {
 .topbar-left h1,
 .reader-heading-row h1 {
   font-size: clamp(2.2rem, 4vw, 3.4rem);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .topbar-right {
@@ -700,6 +702,8 @@ body.page-leaving .page-shell {
 .feature-hero h2 {
   margin-bottom: 0.75rem;
   font-size: clamp(2.8rem, 4vw, 4.1rem);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .stat-card {
@@ -732,6 +736,8 @@ body.page-leaving .page-shell {
 
 .section-head h2 {
   font-size: clamp(2rem, 3vw, 3rem);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .filter-group {
@@ -1048,6 +1054,8 @@ body.page-leaving .page-shell {
 
 .story-header h2 {
   font-size: clamp(2.6rem, 4vw, 3.9rem);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .story-header p {
@@ -1272,6 +1280,12 @@ body.page-leaving .page-shell {
 
   .topbar-right {
     margin-left: 0;
+  }
+
+  .sync-status,
+  .user-chip,
+  .search-field {
+    max-width: 100%;
   }
 
   .search-field {

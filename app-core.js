@@ -829,7 +829,7 @@ function renderBookGrid({ containerId, emptyStateId, books, withFavoriteState })
     const mergedBook = getMergedBook(book.id);
     const displayTitle = mergedBook?.title || book.title;
     const isFavorite = favorites.includes(book.id);
-    const isEdited = Boolean(overrides[book.id]);
+    const isEdited = Boolean(overrides[book.id] || backendState.books[book.id]);
     return `
       <article class="book-card glass-panel" data-book-id="${book.id}" style="animation-delay:${index * 60}ms">
         <button
@@ -959,7 +959,9 @@ function openReader(bookId) {
 function filterBooks(query, favoritesOnly) {
   const favorites = getFavorites();
   return libraryBooks.filter((book) => {
-    const matchesQuery = !query || book.title.toLowerCase().includes(query);
+    const mergedBook = getMergedBook(book.id) || book;
+    const searchableTitle = String(mergedBook.title || book.title).toLowerCase();
+    const matchesQuery = !query || searchableTitle.includes(query);
     const matchesFavorite = !favoritesOnly || favorites.includes(book.id);
     return matchesQuery && matchesFavorite;
   });
