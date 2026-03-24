@@ -32,8 +32,10 @@
           <button type="button" class="icon-btn" id="menuToggle" aria-label="Open reader menu" aria-expanded="false">&#8942;</button>
           <div class="menu-dropdown glass-panel" id="readerMenu">
             <button type="button" data-action="edit">Edit story</button>
+            <button type="button" data-action="title">Change title</button>
             <button type="button" data-action="save">Save changes</button>
             <button type="button" data-action="image">Insert image</button>
+            <button type="button" data-action="poster">Change poster</button>
           </div>
         </div>
       </div>
@@ -43,13 +45,18 @@
       <div class="reader-toolbar">
         <div class="reader-toolbar-actions">
           <button type="button" class="secondary-btn" id="toggleEditorBtn">Toggle Editor</button>
+          <button type="button" class="secondary-btn" id="changeTitleBtn">Change Title</button>
           <button type="button" class="secondary-btn" id="insertImageBtn">Insert Image</button>
+          <button type="button" class="secondary-btn" id="changePosterBtn">Change Poster</button>
         </div>
-        <span class="save-note" id="saveNote">Your edits and inserted images are stored locally in this browser.</span>
+        <span class="save-note" id="saveNote">Your story edits, inserted images, and poster updates are saved for this book.</span>
         <input type="file" id="imageUpload" accept="image/*" hidden>
+        <input type="file" id="posterUpload" accept="image/*" hidden>
       </div>
 
       <section class="editor-panel" id="editorPanel">
+        <label for="storyTitleInput">Story title</label>
+        <input type="text" id="storyTitleInput" placeholder="Rename this story">
         <label for="storyEditor">Story editor</label>
         <textarea id="storyEditor" placeholder="Edit your story here..."></textarea>
         <div class="editor-actions">

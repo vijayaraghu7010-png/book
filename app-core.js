@@ -31,7 +31,7 @@ let appBooted = false;
 const libraryBooks = [
   {
     id: "midnight-archive",
-    title: "The Midnight Archive",
+    title: "Uthirthal",
     image: "assets/midnight-archive-poster.jpeg",
     content: `By the time the city clocks reached midnight, the archive beneath Alder Street had already awakened. Cabinets clicked open on their own, drawers breathed out paper-cool air, and the brass lamps above the long reading tables flickered with a patience that felt almost human.
 
@@ -161,6 +161,16 @@ const pinnedBookPosters = {
   "midnight-archive": "assets/midnight-archive-poster.jpeg"
 };
 
+const legacyBookTitles = {
+  "midnight-archive": [
+    "The Midnight Archive"
+  ]
+};
+
+const pinnedBookTitles = {
+  "midnight-archive": "Uthirthal"
+};
+
 window.ELibraryApp = {
   boot
 };
@@ -172,7 +182,7 @@ function boot() {
 
   appBooted = true;
   initializeLoader();
-  runPosterMigrations();
+  runPinnedBookMigrations();
   const page = document.body.dataset.page || "";
 
   if (!handleRouteAccess(page)) {
@@ -480,9 +490,11 @@ function initializeProfilePage() {
 function initializeReaderPage() {
   const storyContent = document.getElementById("storyContent");
   const readerTitle = document.getElementById("readerTitle");
+  const storyTitleInput = document.getElementById("storyTitleInput");
   const storyEditor = document.getElementById("storyEditor");
   const editorPanel = document.getElementById("editorPanel");
   const toggleEditorBtn = document.getElementById("toggleEditorBtn");
+  const changeTitleBtn = document.getElementById("changeTitleBtn");
   const saveStoryBtn = document.getElementById("saveStoryBtn");
   const insertImageBtn = document.getElementById("insertImageBtn");
   const changePosterBtn = document.getElementById("changePosterBtn");
@@ -493,7 +505,7 @@ function initializeReaderPage() {
   const menuToggle = document.getElementById("menuToggle");
   const readerMenu = document.getElementById("readerMenu");
 
-  if (!storyContent || !readerTitle || !storyEditor || !editorPanel) {
+  if (!storyContent || !readerTitle || !storyEditor || !storyTitleInput || !editorPanel) {
     return;
   }
 
@@ -520,6 +532,7 @@ function initializeReaderPage() {
   };
 
   readerTitle.textContent = book.title;
+  storyTitleInput.value = state.title;
   storyEditor.value = state.contentDraft;
 
   const setFeedback = (message, tone = "") => {
@@ -540,6 +553,7 @@ function initializeReaderPage() {
 
   const persistBookState = () => {
     saveBookOverride(state.bookId, {
+      title: state.title,
       image: state.poster,
       content: state.contentDraft,
       images: cloneImages(state.images)
@@ -555,7 +569,10 @@ function initializeReaderPage() {
   };
 
   const saveStoryChanges = (message) => {
+    state.title = storyTitleInput.value.trim() || getBookById(state.bookId)?.title || state.title;
     state.contentDraft = storyEditor.value;
+    readerTitle.textContent = state.title;
+    storyTitleInput.value = state.title;
     persistBookState();
     renderStoryPreview();
     setEditingState(false);
@@ -577,6 +594,7 @@ function initializeReaderPage() {
       state.contentDraft = latestBook.content;
       state.images = cloneImages(latestBook.images);
       readerTitle.textContent = latestBook.title;
+      storyTitleInput.value = latestBook.title;
       storyEditor.value = latestBook.content;
       renderStoryPreview();
       setFeedback(backendState.enabled ? "Shared update received." : "Story updated.");
@@ -586,8 +604,19 @@ function initializeReaderPage() {
   toggleEditorBtn.addEventListener("click", () => {
     setEditingState(!state.editing);
   });
+  changeTitleBtn?.addEventListener("click", () => {
+    setEditingState(true);
+    storyTitleInput.focus();
+    storyTitleInput.select();
+  });
 
   saveStoryBtn.addEventListener("click", saveStoryChanges);
+
+  storyTitleInput.addEventListener("input", (event) => {
+    state.title = event.target.value.trim() || getBookById(state.bookId)?.title || state.title;
+    readerTitle.textContent = state.title;
+    renderStoryPreview();
+  });
 
   storyEditor.addEventListener("input", (event) => {
     state.contentDraft = event.target.value;
@@ -654,6 +683,12 @@ function initializeReaderPage() {
 
       if (action === "edit") {
         setEditingState(true);
+      }
+
+      if (action === "title") {
+        setEditingState(true);
+        storyTitleInput.focus();
+        storyTitleInput.select();
       }
 
       if (action === "save") {
@@ -866,7 +901,7 @@ function getMergedBook(bookId) {
 
   return {
     ...baseBook,
-    title: overrideSource.title || baseBook.title,
+    title: resolveBookTitle(bookId, overrideSource.title, baseBook.title),
     image: resolveBookImage(bookId, overrideSource.image, baseBook.image),
     content: hasCustomContent ? overrideSource.content : baseBook.content,
     images: Array.isArray(overrideSource.images) ? cloneImages(overrideSource.images) : []
@@ -877,23 +912,33 @@ function getBookById(bookId) {
   return libraryBooks.find((book) => book.id === bookId) || null;
 }
 
-function runPosterMigrations() {
+function runPinnedBookMigrations() {
   const migrationState = readJson(STORAGE_KEYS.posterMigrations, {});
   const overrides = getBookOverrides();
   let hasOverrideChanges = false;
 
-  Object.entries(pinnedBookPosters).forEach(([bookId, pinnedImage]) => {
-    if (migrationState[bookId] === pinnedImage) {
+  Object.keys({ ...pinnedBookPosters, ...pinnedBookTitles }).forEach((bookId) => {
+    const pinnedImage = pinnedBookPosters[bookId];
+    const pinnedTitle = pinnedBookTitles[bookId];
+    const nextSignature = JSON.stringify({
+      image: pinnedImage || "",
+      title: pinnedTitle || ""
+    });
+
+    if (migrationState[bookId] === nextSignature) {
       return;
     }
 
     const currentOverride = overrides[bookId] || {};
+    const currentTitle = String(currentOverride.title || "").trim();
+    const shouldApplyPinnedTitle = pinnedTitle && (!currentTitle || currentTitle === getBookById(bookId)?.title || (legacyBookTitles[bookId] || []).includes(currentTitle));
     overrides[bookId] = {
       ...currentOverride,
-      image: pinnedImage,
+      ...(pinnedImage ? { image: pinnedImage } : {}),
+      ...(shouldApplyPinnedTitle ? { title: pinnedTitle } : {}),
       updatedAt: new Date().toISOString()
     };
-    migrationState[bookId] = pinnedImage;
+    migrationState[bookId] = nextSignature;
     hasOverrideChanges = true;
   });
 
@@ -902,6 +947,22 @@ function runPosterMigrations() {
   }
 
   localStorage.setItem(STORAGE_KEYS.posterMigrations, JSON.stringify(migrationState));
+}
+
+function resolveBookTitle(bookId, overrideTitle, baseTitle) {
+  const nextTitle = String(overrideTitle || "").trim();
+  const legacyTitles = legacyBookTitles[bookId] || [];
+  const pinnedTitle = pinnedBookTitles[bookId];
+
+  if (!nextTitle) {
+    return pinnedTitle || baseTitle;
+  }
+
+  if (pinnedTitle && legacyTitles.includes(nextTitle)) {
+    return pinnedTitle;
+  }
+
+  return nextTitle;
 }
 
 function resolveBookImage(bookId, overrideImage, baseImage) {
@@ -1233,17 +1294,29 @@ async function loadSharedStoriesFromBackend() {
   const pinnedUpdates = [];
   (data || []).forEach((row) => {
     const pinnedImage = pinnedBookPosters[row.book_id];
+    const pinnedTitle = pinnedBookTitles[row.book_id];
+    const legacyTitles = legacyBookTitles[row.book_id] || [];
     if (pinnedImage && row.image !== pinnedImage) {
       pinnedUpdates.push({
         bookId: row.book_id,
+        title: resolveBookTitle(row.book_id, row.title, getBookById(row.book_id)?.title || row.title || ""),
         image: pinnedImage,
+        content: row.content || "",
+        images: Array.isArray(row.images) ? row.images : []
+      });
+    }
+    if (pinnedTitle && (!row.title || legacyTitles.includes(row.title))) {
+      pinnedUpdates.push({
+        bookId: row.book_id,
+        title: pinnedTitle,
+        image: pinnedImage || row.image || "",
         content: row.content || "",
         images: Array.isArray(row.images) ? row.images : []
       });
     }
 
     nextBooks[row.book_id] = {
-      title: row.title || "",
+      title: resolveBookTitle(row.book_id, row.title, getBookById(row.book_id)?.title || row.title || ""),
       image: pinnedImage || row.image || "",
       content: row.content || "",
       images: Array.isArray(row.images) ? row.images : [],
@@ -1274,7 +1347,7 @@ async function syncBookOverrideToCloud(bookId, override) {
 
   const payload = {
     book_id: bookId,
-    title: baseBook.title,
+    title: resolveBookTitle(bookId, override.title, baseBook.title),
     image: resolveBookImage(bookId, override.image, baseBook.image),
     content: override.content ?? baseBook.content,
     images: Array.isArray(override.images) ? override.images : [],
@@ -1300,8 +1373,9 @@ async function syncPinnedPostersToCloud(pinnedUpdates = []) {
     return;
   }
 
-  pinnedUpdates.forEach(({ bookId, image, content, images }) => {
+  pinnedUpdates.forEach(({ bookId, title, image, content, images }) => {
     syncBookOverrideToCloud(bookId, {
+      title,
       image,
       content,
       images: cloneImages(images)
