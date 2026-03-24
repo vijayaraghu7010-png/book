@@ -27,6 +27,7 @@
 
       <div class="reader-actions-row">
         <span class="status-pill" id="readerModeStatus">Viewing</span>
+        <span class="status-pill sync-status is-checking" data-cloud-sync-status>Cloud Sync Checking</span>
 
         <div class="menu-box">
           <button type="button" class="icon-btn" id="menuToggle" aria-label="Open reader menu" aria-expanded="false">&#8942;</button>
@@ -49,7 +50,7 @@
           <button type="button" class="secondary-btn" id="insertImageBtn">Insert Image</button>
           <button type="button" class="secondary-btn" id="changePosterBtn">Change Poster</button>
         </div>
-        <span class="save-note" id="saveNote">Your story edits, inserted images, and poster updates are saved for this book.</span>
+        <span class="save-note" id="saveNote">Changes save for all users only when Cloud Sync is ON.</span>
         <input type="file" id="imageUpload" accept="image/*" hidden>
         <input type="file" id="posterUpload" accept="image/*" hidden>
       </div>

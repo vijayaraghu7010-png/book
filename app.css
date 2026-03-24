@@ -229,6 +229,28 @@ body.page-leaving .page-shell {
   font-weight: 700;
 }
 
+.sync-status {
+  min-width: 156px;
+}
+
+.sync-status.is-online {
+  background: rgba(44, 181, 111, 0.12);
+  border-color: rgba(44, 181, 111, 0.32);
+  color: #8ff0bc;
+}
+
+.sync-status.is-offline {
+  background: rgba(210, 82, 82, 0.12);
+  border-color: rgba(210, 82, 82, 0.32);
+  color: #ffb2b2;
+}
+
+.sync-status.is-checking {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--text-body);
+}
+
 .eyebrow,
 .quote-label {
   display: inline-block;
@@ -942,6 +964,32 @@ body.page-leaving .page-shell {
   margin-bottom: 1.3rem;
 }
 
+.story-cover {
+  position: relative;
+  width: min(100%, 420px);
+  overflow: hidden;
+  border-radius: 24px;
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: var(--shadow-md);
+}
+
+.story-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 48%, rgba(4, 8, 16, 0.42) 100%);
+  pointer-events: none;
+}
+
+.story-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .story-header h2 {
   font-size: clamp(2.6rem, 4vw, 3.9rem);
 }
@@ -1238,6 +1286,10 @@ body.page-leaving .page-shell {
   .feature-hero h2,
   .story-header h2 {
     font-size: 2.55rem;
+  }
+
+  .story-cover {
+    width: 100%;
   }
 
   .book-card h3,

@@ -27,6 +27,7 @@ const backendState = {
 };
 
 let appBooted = false;
+const CLOUD_SYNC_REQUIRED = true;
 
 const libraryBooks = [
   {
@@ -192,6 +193,7 @@ function boot() {
   initializePageTransitions();
   initializeLogoutActions();
   populateUserIdentity();
+  updateCloudSyncIndicators();
 
   switch (page) {
     case "login":
@@ -541,7 +543,17 @@ function initializeReaderPage() {
     }
 
     saveNote.textContent = message;
-    saveNote.style.color = tone === "success" ? "var(--success)" : "";
+    if (tone === "success") {
+      saveNote.style.color = "var(--success)";
+      return;
+    }
+
+    if (tone === "warning") {
+      saveNote.style.color = "var(--gold-strong)";
+      return;
+    }
+
+    saveNote.style.color = "";
   };
 
   const setEditingState = (isEditing) => {
@@ -551,32 +563,47 @@ function initializeReaderPage() {
     toggleEditorBtn.textContent = isEditing ? "Hide Editor" : "Toggle Editor";
   };
 
-  const persistBookState = () => {
-    saveBookOverride(state.bookId, {
+  const persistBookState = async () => {
+    if (CLOUD_SYNC_REQUIRED && !(await ensureCloudSyncReady())) {
+      setFeedback("Cloud Sync is OFF. Reconnect Supabase before saving for all users.", "warning");
+      return false;
+    }
+
+    const saved = await saveBookOverride(state.bookId, {
       title: state.title,
       image: state.poster,
       content: state.contentDraft,
       images: cloneImages(state.images)
     });
+
+    if (!saved) {
+      setFeedback("Cloud Sync is OFF. This change was not shared with all users.", "warning");
+      return false;
+    }
+
+    return true;
   };
 
   const renderStoryPreview = () => {
     storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images, state.poster);
     bindReaderMediaActions(state, storyContent, {
       onPersist: persistBookState,
-      onFeedback: (message) => setFeedback(message, "success")
+      onFeedback: (message, tone = "success") => setFeedback(message, tone)
     });
   };
 
-  const saveStoryChanges = (message) => {
+  const saveStoryChanges = async (message) => {
     state.title = storyTitleInput.value.trim() || getBookById(state.bookId)?.title || state.title;
     state.contentDraft = storyEditor.value;
     readerTitle.textContent = state.title;
     storyTitleInput.value = state.title;
-    persistBookState();
+    const saved = await persistBookState();
+    if (!saved) {
+      return;
+    }
     renderStoryPreview();
     setEditingState(false);
-    setFeedback(message || `Saved locally at ${formatShortTime(new Date())}.`, "success");
+    setFeedback(message || `Saved to cloud at ${formatShortTime(new Date())}.`, "success");
   };
 
   renderStoryPreview();
@@ -637,11 +664,18 @@ function initializeReaderPage() {
     const reader = new FileReader();
     reader.onload = () => {
       createManagedImage(String(reader.result || ""), storyContent.clientWidth || 720, (imageData) => {
+        const previousImages = cloneImages(state.images);
         state.images = [...state.images, imageData];
-        persistBookState();
-        renderStoryPreview();
-        setEditingState(true);
-        setFeedback("Image inserted. Drag the lower-right handle to resize it.", "success");
+        persistBookState().then((saved) => {
+          if (!saved) {
+            state.images = previousImages;
+            return;
+          }
+
+          renderStoryPreview();
+          setEditingState(true);
+          setFeedback("Image inserted and synced. Drag the lower-right handle to resize it.", "success");
+        });
       });
     };
     reader.readAsDataURL(file);
@@ -656,10 +690,17 @@ function initializeReaderPage() {
 
     const reader = new FileReader();
     reader.onload = () => {
+      const previousPoster = state.poster;
       state.poster = String(reader.result || "");
-      persistBookState();
-      renderStoryPreview();
-      setFeedback("Poster updated and saved for this book.", "success");
+      persistBookState().then((saved) => {
+        if (!saved) {
+          state.poster = previousPoster;
+          return;
+        }
+
+        renderStoryPreview();
+        setFeedback("Poster updated and synced for all users.", "success");
+      });
     };
     reader.readAsDataURL(file);
     posterUpload.value = "";
@@ -950,6 +991,46 @@ function runPinnedBookMigrations() {
   localStorage.setItem(STORAGE_KEYS.posterMigrations, JSON.stringify(migrationState));
 }
 
+async function ensureCloudSyncReady() {
+  if (backendState.enabled) {
+    return true;
+  }
+
+  await initializeCloudSync();
+  return backendState.enabled;
+}
+
+function updateCloudSyncIndicators() {
+  const status = getCloudSyncStatus();
+
+  document.querySelectorAll("[data-cloud-sync-status]").forEach((element) => {
+    element.textContent = status.label;
+    element.classList.remove("is-online", "is-offline", "is-checking");
+    element.classList.add(status.className);
+  });
+}
+
+function getCloudSyncStatus() {
+  if (backendState.loading) {
+    return {
+      label: "Cloud Sync Checking",
+      className: "is-checking"
+    };
+  }
+
+  if (backendState.enabled) {
+    return {
+      label: "Cloud Sync ON",
+      className: "is-online"
+    };
+  }
+
+  return {
+    label: "Cloud Sync OFF",
+    className: "is-offline"
+  };
+}
+
 function resolveBookTitle(bookId, overrideTitle, baseTitle) {
   const nextTitle = String(overrideTitle || "").trim();
   const legacyTitles = legacyBookTitles[bookId] || [];
@@ -980,16 +1061,21 @@ function resolveBookImage(bookId, overrideImage, baseImage) {
   return nextImage;
 }
 
-function saveBookOverride(bookId, value) {
+async function saveBookOverride(bookId, value) {
   const overrides = getBookOverrides();
-  overrides[bookId] = {
+  const nextOverride = {
     ...(overrides[bookId] || {}),
     ...value,
     updatedAt: new Date().toISOString()
   };
-  localStorage.setItem(STORAGE_KEYS.bookOverrides, JSON.stringify(overrides));
+  const synced = await syncBookOverrideToCloud(bookId, nextOverride);
+  if (!synced) {
+    return false;
+  }
 
-  syncBookOverrideToCloud(bookId, overrides[bookId]);
+  overrides[bookId] = nextOverride;
+  localStorage.setItem(STORAGE_KEYS.bookOverrides, JSON.stringify(overrides));
+  return true;
 }
 
 function getBookOverrides() {
@@ -1150,11 +1236,19 @@ function bindReaderMediaActions(state, storyContent, callbacks) {
     }
 
     frame.querySelector("[data-remove-image]")?.addEventListener("click", () => {
+      const previousImages = cloneImages(state.images);
       state.images = state.images.filter((image) => image.id !== imageId);
-      onPersist();
-      storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images, state.poster);
-      bindReaderMediaActions(state, storyContent, callbacks);
-      onFeedback("Image removed and saved locally.");
+      onPersist().then((saved) => {
+        if (!saved) {
+          state.images = previousImages;
+          onFeedback("Cloud Sync is OFF. Image removal was not shared.", "warning");
+          return;
+        }
+
+        storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images, state.poster);
+        bindReaderMediaActions(state, storyContent, callbacks);
+        onFeedback("Image removed and synced for all users.", "success");
+      });
     });
 
     frame.querySelector(".resize-handle")?.addEventListener("pointerdown", (event) => {
@@ -1179,6 +1273,9 @@ function bindReaderMediaActions(state, storyContent, callbacks) {
         frame.style.height = `${nextHeight}px`;
       };
 
+      const previousWidth = imageRecord.width;
+      const previousHeight = imageRecord.height;
+
       const onPointerUp = () => {
         document.body.classList.remove("is-resizing");
         document.removeEventListener("pointermove", onPointerMove);
@@ -1186,8 +1283,18 @@ function bindReaderMediaActions(state, storyContent, callbacks) {
 
         imageRecord.width = Math.round(frame.getBoundingClientRect().width);
         imageRecord.height = Math.round(frame.getBoundingClientRect().height);
-        onPersist();
-        onFeedback("Image size updated and saved locally.");
+        onPersist().then((saved) => {
+          if (!saved) {
+            imageRecord.width = previousWidth;
+            imageRecord.height = previousHeight;
+            frame.style.width = `${previousWidth}px`;
+            frame.style.height = `${previousHeight}px`;
+            onFeedback("Cloud Sync is OFF. Image resize was not shared.", "warning");
+            return;
+          }
+
+          onFeedback("Image size updated and synced for all users.", "success");
+        });
       };
 
       document.addEventListener("pointermove", onPointerMove);
@@ -1240,6 +1347,7 @@ async function initializeCloudSync() {
   const client = getSupabaseClient();
   if (!client) {
     backendState.initialized = true;
+    updateCloudSyncIndicators();
     return;
   }
 
@@ -1247,6 +1355,7 @@ async function initializeCloudSync() {
   backendState.initialized = true;
   backendState.enabled = true;
   backendState.client = client;
+  updateCloudSyncIndicators();
 
   try {
     await loadSharedStoriesFromBackend();
@@ -1270,6 +1379,7 @@ async function initializeCloudSync() {
     }
   } finally {
     backendState.loading = false;
+    updateCloudSyncIndicators();
   }
 }
 
@@ -1335,16 +1445,22 @@ async function loadSharedStoriesFromBackend() {
 async function syncBookOverrideToCloud(bookId, override) {
   const client = getSupabaseClient();
   if (!client) {
-    return;
+    updateCloudSyncIndicators();
+    return false;
   }
 
   if (!backendState.enabled && !backendState.loading) {
     await initializeCloudSync();
   }
 
+  if (!backendState.enabled) {
+    updateCloudSyncIndicators();
+    return false;
+  }
+
   const baseBook = getBookById(bookId);
   if (!baseBook) {
-    return;
+    return false;
   }
 
   const payload = {
@@ -1366,7 +1482,10 @@ async function syncBookOverrideToCloud(bookId, override) {
     if (isRecoverableBackendError(error)) {
       disableBackendMode();
     }
+    return false;
   }
+
+  return true;
 }
 
 async function syncPinnedPostersToCloud(pinnedUpdates = []) {
@@ -1435,4 +1554,5 @@ function disableBackendMode() {
   if (window.E_LIBRARY_SUPABASE_CONFIG) {
     window.E_LIBRARY_SUPABASE_CONFIG.enabled = false;
   }
+  updateCloudSyncIndicators();
 }
