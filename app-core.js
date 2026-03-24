@@ -1,7 +1,7 @@
 const STORAGE_KEYS = {
   auth: "elibrary.auth",
   username: "elibrary.username",
-  password: "elibrary.password",
+  token: "elibrary.token",
   loginAt: "elibrary.loginAt",
   role: "elibrary.role",
   accessMode: "elibrary.accessMode",
@@ -178,7 +178,7 @@ window.ELibraryApp = {
   boot
 };
 
-function boot() {
+async function boot() {
   if (appBooted) {
     return;
   }
@@ -191,6 +191,13 @@ function boot() {
 
   if (!handleRouteAccess(page)) {
     return;
+  }
+
+  if (page !== "login") {
+    const sessionValid = await refreshSessionFromToken();
+    if (!sessionValid) {
+      return;
+    }
   }
 
   initializePageTransitions();
@@ -293,11 +300,10 @@ function initializePageTransitions() {
 
 function initializeLogoutActions() {
   document.querySelectorAll("[data-logout]").forEach((button) => {
-    button.addEventListener("click", () => {
-      localStorage.removeItem(STORAGE_KEYS.auth);
+    button.addEventListener("click", async () => {
+      await revokeStoredSession();
+      clearStoredSession();
       localStorage.removeItem(STORAGE_KEYS.currentBook);
-      localStorage.removeItem(STORAGE_KEYS.role);
-      localStorage.removeItem(STORAGE_KEYS.accessMode);
       navigateTo("index.html");
     });
   });
@@ -1160,7 +1166,8 @@ function toggleFavorite(bookId) {
 }
 
 function isAuthenticated() {
-  return localStorage.getItem(STORAGE_KEYS.auth) === "true";
+  return localStorage.getItem(STORAGE_KEYS.auth) === "true"
+    && Boolean(localStorage.getItem(STORAGE_KEYS.token));
 }
 
 function readJson(key, fallback) {
@@ -1547,12 +1554,13 @@ async function syncBookOverrideToCloud(bookId, override) {
   }
 
   const storedUsername = localStorage.getItem(STORAGE_KEYS.username) || "";
-  const storedPassword = localStorage.getItem(STORAGE_KEYS.password) || "";
-  const passwordHash = await createPasswordHash(storedPassword);
+  const storedToken = localStorage.getItem(STORAGE_KEYS.token) || "";
+  if (!storedToken) {
+    return false;
+  }
 
   const response = await client.rpc("upsert_story_admin", {
-    p_username: normalizeUsername(storedUsername),
-    p_password_hash: passwordHash,
+    p_token: storedToken,
     p_book_id: bookId,
     p_title: resolveBookTitle(bookId, override.title, baseBook.title),
     p_image: resolveBookImage(bookId, override.image, baseBook.image),
@@ -1571,6 +1579,10 @@ async function syncBookOverrideToCloud(bookId, override) {
 
   if (!response.data?.success) {
     console.error("Shared story save denied:", response.data?.message || "Unknown error");
+    if (String(response.data?.message || "").toLowerCase().includes("session")) {
+      clearStoredSession();
+      navigateTo("index.html");
+    }
     return false;
   }
 
@@ -1591,6 +1603,79 @@ async function syncPinnedPostersToCloud(pinnedUpdates = []) {
       images: cloneImages(images)
     });
   });
+}
+
+async function refreshSessionFromToken() {
+  const token = localStorage.getItem(STORAGE_KEYS.token);
+  if (!token) {
+    clearStoredSession();
+    window.location.replace("index.html");
+    return false;
+  }
+
+  const client = getSupabaseClient();
+  if (!client) {
+    return true;
+  }
+
+  try {
+    const response = await client.rpc("authenticate_session", {
+      p_token: token
+    });
+
+    if (response.error) {
+      if (isRecoverableBackendError(response.error)) {
+        return true;
+      }
+
+      throw response.error;
+    }
+
+    if (!response.data?.success) {
+      clearStoredSession();
+      window.location.replace("index.html");
+      return false;
+    }
+
+    localStorage.setItem(STORAGE_KEYS.auth, "true");
+    localStorage.setItem(STORAGE_KEYS.username, response.data.display_name || response.data.username || "Reader");
+    localStorage.setItem(STORAGE_KEYS.role, response.data.role || "user");
+    return true;
+  } catch (error) {
+    console.error("Session validation failed:", error);
+    if (!isRecoverableBackendError(error)) {
+      clearStoredSession();
+      window.location.replace("index.html");
+      return false;
+    }
+
+    return true;
+  }
+}
+
+async function revokeStoredSession() {
+  const token = localStorage.getItem(STORAGE_KEYS.token);
+  const client = getSupabaseClient();
+
+  if (!token || !client) {
+    return;
+  }
+
+  try {
+    await client.rpc("revoke_session", {
+      p_token: token
+    });
+  } catch (error) {
+    console.error("Session revoke failed:", error);
+  }
+}
+
+function clearStoredSession() {
+  localStorage.removeItem(STORAGE_KEYS.auth);
+  localStorage.removeItem(STORAGE_KEYS.token);
+  localStorage.removeItem(STORAGE_KEYS.role);
+  localStorage.removeItem(STORAGE_KEYS.accessMode);
+  localStorage.removeItem("elibrary.password");
 }
 
 function getSupabaseClient() {

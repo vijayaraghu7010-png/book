@@ -1,7 +1,7 @@
 const AUTH_STORAGE_KEYS = {
   auth: "elibrary.auth",
   username: "elibrary.username",
-  password: "elibrary.password",
+  token: "elibrary.token",
   loginAt: "elibrary.loginAt",
   role: "elibrary.role",
   accessMode: "elibrary.accessMode"
@@ -29,10 +29,12 @@ async function boot() {
   authBooted = true;
   initializeLoader();
 
-  if (localStorage.getItem(AUTH_STORAGE_KEYS.auth) === "true") {
+  if (hasStoredSession()) {
     window.location.replace("home.html");
     return;
   }
+
+  clearInvalidSessionState();
 
   initializeLoginPage();
   window.setTimeout(() => {
@@ -73,7 +75,7 @@ function initializeLoginPage() {
 
   quoteText.textContent = AUTH_QUOTES[Math.floor(Math.random() * AUTH_QUOTES.length)];
   usernameInput.value = localStorage.getItem(AUTH_STORAGE_KEYS.username) || "";
-  passwordInput.value = localStorage.getItem(AUTH_STORAGE_KEYS.password) || "";
+  passwordInput.value = "";
   setAccessMode(localStorage.getItem(AUTH_STORAGE_KEYS.accessMode) || "user");
 
   accessButtons.forEach((button) => {
@@ -104,10 +106,11 @@ function initializeLoginPage() {
       const authResult = await signInOrRegister(username, password, displayUsername, accessMode);
 
       localStorage.setItem(AUTH_STORAGE_KEYS.auth, "true");
-      localStorage.setItem(AUTH_STORAGE_KEYS.username, displayUsername);
-      localStorage.setItem(AUTH_STORAGE_KEYS.password, password);
+      localStorage.setItem(AUTH_STORAGE_KEYS.username, authResult.display_name || displayUsername);
+      localStorage.setItem(AUTH_STORAGE_KEYS.token, authResult.token || "");
       localStorage.setItem(AUTH_STORAGE_KEYS.role, authResult.role || "user");
       localStorage.setItem(AUTH_STORAGE_KEYS.accessMode, accessMode);
+      localStorage.removeItem("elibrary.password");
 
       if (!localStorage.getItem(AUTH_STORAGE_KEYS.loginAt)) {
         localStorage.setItem(AUTH_STORAGE_KEYS.loginAt, new Date().toISOString());
@@ -159,6 +162,10 @@ async function signInOrRegister(username, password, displayUsername, accessMode)
     if (accessMode === "admin" && authResponse.data.role !== "admin") {
       throw new Error("This account does not have admin access.");
     }
+
+    if (!authResponse.data.token) {
+      throw new Error("Session token was not issued by the backend.");
+    }
     return authResponse.data;
   }
 
@@ -184,7 +191,26 @@ async function signInOrRegister(username, password, displayUsername, accessMode)
     throw new Error(registerResponse.data?.message || "Unable to create account.");
   }
 
+  if (!registerResponse.data.token) {
+    throw new Error("Session token was not issued by the backend.");
+  }
+
   return registerResponse.data;
+}
+
+function hasStoredSession() {
+  return localStorage.getItem(AUTH_STORAGE_KEYS.auth) === "true"
+    && Boolean(localStorage.getItem(AUTH_STORAGE_KEYS.token));
+}
+
+function clearInvalidSessionState() {
+  if (hasStoredSession()) {
+    return;
+  }
+
+  localStorage.removeItem(AUTH_STORAGE_KEYS.auth);
+  localStorage.removeItem(AUTH_STORAGE_KEYS.token);
+  localStorage.removeItem(AUTH_STORAGE_KEYS.role);
 }
 
 function getBackendClient() {
