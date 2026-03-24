@@ -1277,6 +1277,8 @@ body.page-leaving .page-shell {
   .search-field {
     min-width: 0;
     width: 100%;
+    flex: 0 0 auto;
+    min-height: 56px;
   }
 
   .mobile-nav {
