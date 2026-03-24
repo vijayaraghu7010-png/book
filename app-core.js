@@ -184,6 +184,7 @@ function boot() {
   }
 
   appBooted = true;
+  sanitizeLegacySessionState();
   resetPageState();
   initializeLoader();
   runPinnedBookMigrations();
@@ -1163,6 +1164,21 @@ function isAuthenticated() {
   return localStorage.getItem(STORAGE_KEYS.auth) === "true";
 }
 
+function sanitizeLegacySessionState() {
+  localStorage.removeItem("elibrary.token");
+
+  if (localStorage.getItem(STORAGE_KEYS.auth) !== "true") {
+    return;
+  }
+
+  const storedUsername = localStorage.getItem(STORAGE_KEYS.username);
+  if (!storedUsername) {
+    localStorage.removeItem(STORAGE_KEYS.auth);
+    localStorage.removeItem(STORAGE_KEYS.role);
+    localStorage.removeItem(STORAGE_KEYS.accessMode);
+  }
+}
+
 function readJson(key, fallback) {
   try {
     const value = localStorage.getItem(key);
@@ -1583,13 +1599,19 @@ async function syncPinnedPostersToCloud(pinnedUpdates = []) {
     return;
   }
 
+  const uniqueUpdates = new Map();
+
   pinnedUpdates.forEach(({ bookId, title, image, content, images }) => {
-    syncBookOverrideToCloud(bookId, {
+    uniqueUpdates.set(bookId, {
       title,
       image,
       content,
       images: cloneImages(images)
     });
+  });
+
+  uniqueUpdates.forEach((override, bookId) => {
+    syncBookOverrideToCloud(bookId, override);
   });
 }
 

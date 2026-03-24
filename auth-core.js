@@ -27,6 +27,7 @@ async function boot() {
   }
 
   authBooted = true;
+  sanitizeLegacyAuthState();
   initializeLoader();
 
   if (localStorage.getItem(AUTH_STORAGE_KEYS.auth) === "true") {
@@ -71,7 +72,9 @@ function initializeLoginPage() {
     return;
   }
 
-  quoteText.textContent = AUTH_QUOTES[Math.floor(Math.random() * AUTH_QUOTES.length)];
+  if (quoteText) {
+    quoteText.textContent = AUTH_QUOTES[Math.floor(Math.random() * AUTH_QUOTES.length)];
+  }
   usernameInput.value = localStorage.getItem(AUTH_STORAGE_KEYS.username) || "";
   passwordInput.value = localStorage.getItem(AUTH_STORAGE_KEYS.password) || "";
   setAccessMode(localStorage.getItem(AUTH_STORAGE_KEYS.accessMode) || "user");
@@ -136,6 +139,21 @@ function initializeLoginPage() {
     accessDescription.textContent = nextMode === "admin"
       ? "Sign in as the admin to edit titles, stories, posters, and shared content for every reader."
       : "Sign in as a user to read stories, browse favorites, and explore the library in read-only mode.";
+  }
+}
+
+function sanitizeLegacyAuthState() {
+  localStorage.removeItem("elibrary.token");
+
+  if (localStorage.getItem(AUTH_STORAGE_KEYS.auth) !== "true") {
+    return;
+  }
+
+  const storedUsername = localStorage.getItem(AUTH_STORAGE_KEYS.username);
+  if (!storedUsername) {
+    localStorage.removeItem(AUTH_STORAGE_KEYS.auth);
+    localStorage.removeItem(AUTH_STORAGE_KEYS.role);
+    localStorage.removeItem(AUTH_STORAGE_KEYS.accessMode);
   }
 }
 
