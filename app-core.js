@@ -195,6 +195,7 @@ function boot() {
   initializePageTransitions();
   initializeLogoutActions();
   populateUserIdentity();
+  document.body.classList.add(isAdminUser() ? "admin-mode" : "user-mode");
   updateCloudSyncIndicators();
 
   switch (page) {

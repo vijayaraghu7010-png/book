@@ -145,6 +145,10 @@ p {
   display: none !important;
 }
 
+body.user-mode [data-admin-only] {
+  display: none !important;
+}
+
 .glass-panel,
 .glass-inner {
   border: 1px solid var(--line-soft);

@@ -29,7 +29,7 @@
         <span class="status-pill" id="readerModeStatus">Viewing</span>
         <span class="status-pill sync-status is-checking" data-cloud-sync-status>Cloud Sync Checking</span>
 
-        <div class="menu-box">
+        <div class="menu-box" data-admin-only>
           <button type="button" class="icon-btn" id="menuToggle" aria-label="Open reader menu" aria-expanded="false">&#8942;</button>
           <div class="menu-dropdown glass-panel" id="readerMenu">
             <button type="button" data-action="edit">Edit story</button>
@@ -45,17 +45,17 @@
     <section class="reader-panel glass-panel">
       <div class="reader-toolbar">
         <div class="reader-toolbar-actions">
-          <button type="button" class="secondary-btn" id="toggleEditorBtn">Toggle Editor</button>
-          <button type="button" class="secondary-btn" id="changeTitleBtn">Change Title</button>
-          <button type="button" class="secondary-btn" id="insertImageBtn">Insert Image</button>
-          <button type="button" class="secondary-btn" id="changePosterBtn">Change Poster</button>
+          <button type="button" class="secondary-btn" id="toggleEditorBtn" data-admin-only>Toggle Editor</button>
+          <button type="button" class="secondary-btn" id="changeTitleBtn" data-admin-only>Change Title</button>
+          <button type="button" class="secondary-btn" id="insertImageBtn" data-admin-only>Insert Image</button>
+          <button type="button" class="secondary-btn" id="changePosterBtn" data-admin-only>Change Poster</button>
         </div>
         <span class="save-note" id="saveNote">Changes save for all users only when Cloud Sync is ON.</span>
         <input type="file" id="imageUpload" accept="image/*" hidden>
         <input type="file" id="posterUpload" accept="image/*" hidden>
       </div>
 
-      <section class="editor-panel" id="editorPanel">
+      <section class="editor-panel" id="editorPanel" data-admin-only>
         <label for="storyTitleInput">Story title</label>
         <input type="text" id="storyTitleInput" placeholder="Rename this story">
         <label for="storyEditor">Story editor</label>
