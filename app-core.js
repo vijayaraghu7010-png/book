@@ -184,6 +184,7 @@ function boot() {
   }
 
   appBooted = true;
+  resetPageState();
   initializeLoader();
   runPinnedBookMigrations();
   const page = document.body.dataset.page || "";
@@ -224,6 +225,17 @@ function boot() {
   window.setTimeout(() => {
     document.body.classList.add("page-ready");
   }, 60);
+}
+
+function resetPageState() {
+  document.body.classList.remove("page-leaving");
+  document.body.classList.add("page-ready");
+
+  window.addEventListener("pageshow", () => {
+    document.body.classList.remove("page-leaving");
+    document.body.classList.add("page-ready");
+    document.getElementById("loaderOverlay")?.classList.add("is-hidden");
+  });
 }
 
 function initializeLoader() {
