@@ -961,7 +961,7 @@ function filterBooks(query, favoritesOnly) {
   return libraryBooks.filter((book) => {
     const mergedBook = getMergedBook(book.id) || book;
     const searchableTitle = String(mergedBook.title || book.title).toLowerCase();
-    const matchesQuery = !query || searchableTitle.includes(query);
+    const matchesQuery = !query || searchableTitle.startsWith(query);
     const matchesFavorite = !favoritesOnly || favorites.includes(book.id);
     return matchesQuery && matchesFavorite;
   });
