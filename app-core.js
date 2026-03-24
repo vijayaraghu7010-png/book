@@ -738,6 +738,7 @@ function renderBookGrid({ containerId, emptyStateId, books, withFavoriteState })
 
   container.innerHTML = books.map((book, index) => {
     const mergedBook = getMergedBook(book.id);
+    const displayTitle = mergedBook?.title || book.title;
     const isFavorite = favorites.includes(book.id);
     const isEdited = Boolean(overrides[book.id]);
     return `
@@ -745,7 +746,7 @@ function renderBookGrid({ containerId, emptyStateId, books, withFavoriteState })
         <button
           type="button"
           class="favorite-btn ${withFavoriteState && isFavorite ? "is-favorite" : ""}"
-          aria-label="Toggle favorite for ${escapeAttribute(book.title)}"
+          aria-label="Toggle favorite for ${escapeAttribute(displayTitle)}"
           data-favorite-id="${book.id}"
         >
           &#10084;
@@ -753,7 +754,7 @@ function renderBookGrid({ containerId, emptyStateId, books, withFavoriteState })
         <div class="book-cover">
           <img
             src="${escapeAttribute(mergedBook.image || book.image)}"
-            alt="${escapeAttribute(book.title)} cover"
+            alt="${escapeAttribute(displayTitle)} cover"
             loading="lazy"
             decoding="async"
           >
@@ -761,7 +762,7 @@ function renderBookGrid({ containerId, emptyStateId, books, withFavoriteState })
         <div class="book-card-body">
           <div class="book-card-head">
             <div>
-              <h3>${escapeHtml(book.title)}</h3>
+              <h3>${escapeHtml(displayTitle)}</h3>
               <p>${escapeHtml(createPreview(mergedBook.content))}</p>
             </div>
             ${isEdited ? '<span class="book-tag">Edited</span>' : ""}
@@ -847,7 +848,7 @@ function renderEditedStories(editedBooks) {
   list.innerHTML = editedBooks.map(({ book, updatedAt }) => `
     <article class="edited-item">
       <div>
-        <h3>${escapeHtml(book.title)}</h3>
+        <h3>${escapeHtml(getMergedBook(book.id)?.title || book.title)}</h3>
         <time datetime="${escapeAttribute(updatedAt || "")}">Updated ${formatDateTime(updatedAt)}</time>
       </div>
       <button type="button" class="secondary-btn" data-open-reader="${book.id}">Resume Reading</button>
@@ -1070,6 +1071,7 @@ function getEditedBooks() {
 
   return [...localEntries, ...cloudEntries]
     .filter(([, value]) => value && (
+      (typeof value.title === "string" && value.title.trim()) ||
       (typeof value.image === "string" && value.image.trim()) ||
       (value.content && value.content.trim()) ||
       (Array.isArray(value.images) && value.images.length)
