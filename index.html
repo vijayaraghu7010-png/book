@@ -50,10 +50,17 @@
 
       <form class="login-form glass-inner" id="loginForm" autocomplete="on">
         <div class="form-heading">
-          <p class="eyebrow">Member Access</p>
+          <p class="eyebrow" id="accessEyebrow">User Access</p>
           <h2>Welcome back</h2>
-          <p>Sign in to open your dashboard, story reader, favorites, and saved edits.</p>
+          <p id="accessDescription">Sign in as a user to read stories, browse favorites, and explore the library in read-only mode.</p>
         </div>
+
+        <div class="access-toggle" aria-label="Choose access mode">
+          <button type="button" class="filter-chip active" id="userAccessBtn" data-access-mode="user">User Login</button>
+          <button type="button" class="filter-chip" id="adminAccessBtn" data-access-mode="admin">Admin Login</button>
+        </div>
+
+        <input type="hidden" id="accessModeInput" value="user">
 
         <label class="input-group">
           <span>Username</span>
@@ -68,7 +75,7 @@
         <button type="submit" class="primary-btn wide-btn">Enter Library</button>
 
         <p class="form-footnote">
-          Your username, password, and session state are stored locally in this browser for a smooth return experience.
+          User accounts can read only. Admin access is reserved for the site owner and unlocks editing across the shared library.
         </p>
       </form>
     </section>

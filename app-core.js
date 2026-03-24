@@ -3,6 +3,8 @@ const STORAGE_KEYS = {
   username: "elibrary.username",
   password: "elibrary.password",
   loginAt: "elibrary.loginAt",
+  role: "elibrary.role",
+  accessMode: "elibrary.accessMode",
   favorites: "elibrary.favorites",
   bookOverrides: "elibrary.bookOverrides",
   currentBook: "elibrary.currentBook",
@@ -281,6 +283,8 @@ function initializeLogoutActions() {
     button.addEventListener("click", () => {
       localStorage.removeItem(STORAGE_KEYS.auth);
       localStorage.removeItem(STORAGE_KEYS.currentBook);
+      localStorage.removeItem(STORAGE_KEYS.role);
+      localStorage.removeItem(STORAGE_KEYS.accessMode);
       navigateTo("index.html");
     });
   });
@@ -506,6 +510,7 @@ function initializeReaderPage() {
   const readerModeStatus = document.getElementById("readerModeStatus");
   const menuToggle = document.getElementById("menuToggle");
   const readerMenu = document.getElementById("readerMenu");
+  const menuBox = menuToggle?.closest(".menu-box") || null;
 
   if (!storyContent || !readerTitle || !storyEditor || !storyTitleInput || !editorPanel) {
     return;
@@ -532,6 +537,7 @@ function initializeReaderPage() {
     editing: false,
     syncBound: false
   };
+  const canEdit = isAdminUser();
 
   readerTitle.textContent = book.title;
   storyTitleInput.value = state.title;
@@ -557,6 +563,14 @@ function initializeReaderPage() {
   };
 
   const setEditingState = (isEditing) => {
+    if (!canEdit) {
+      state.editing = false;
+      editorPanel.classList.remove("active");
+      readerModeStatus.textContent = "Read Only";
+      toggleEditorBtn.textContent = "Read Only";
+      return;
+    }
+
     state.editing = isEditing;
     editorPanel.classList.toggle("active", isEditing);
     readerModeStatus.textContent = isEditing ? "Editing" : "Viewing";
@@ -564,6 +578,11 @@ function initializeReaderPage() {
   };
 
   const persistBookState = async () => {
+    if (!canEdit) {
+      setFeedback("Only admin can edit stories on this site.", "warning");
+      return false;
+    }
+
     if (CLOUD_SYNC_REQUIRED && !(await ensureCloudSyncReady())) {
       setFeedback("Cloud Sync is OFF. Reconnect Supabase before saving for all users.", "warning");
       return false;
@@ -607,6 +626,22 @@ function initializeReaderPage() {
   };
 
   renderStoryPreview();
+
+  if (!canEdit) {
+    storyTitleInput.disabled = true;
+    storyEditor.disabled = true;
+    editorPanel.classList.remove("active");
+    changeTitleBtn?.setAttribute("hidden", "hidden");
+    insertImageBtn?.setAttribute("hidden", "hidden");
+    changePosterBtn?.setAttribute("hidden", "hidden");
+    toggleEditorBtn.setAttribute("hidden", "hidden");
+    saveStoryBtn.setAttribute("hidden", "hidden");
+    if (menuBox) {
+      menuBox.setAttribute("hidden", "hidden");
+    }
+    readerModeStatus.textContent = "Read Only";
+    setFeedback("User mode is read-only. Sign in as admin to edit titles, stories, posters, or images.");
+  }
 
   if (!state.syncBound) {
     state.syncBound = true;
@@ -920,6 +955,7 @@ function filterBooks(query, favoritesOnly) {
 function populateUserIdentity() {
   const username = localStorage.getItem(STORAGE_KEYS.username) || "Reader";
   const initial = username.trim().charAt(0).toUpperCase() || "R";
+  const role = getCurrentUserRole();
 
   document.querySelectorAll("[data-username]").forEach((element) => {
     element.textContent = username;
@@ -927,6 +963,10 @@ function populateUserIdentity() {
 
   document.querySelectorAll("[data-user-initial]").forEach((element) => {
     element.textContent = initial;
+  });
+
+  document.querySelectorAll("[data-user-role]").forEach((element) => {
+    element.textContent = role === "admin" ? "Admin" : "User";
   });
 }
 
@@ -1085,6 +1125,14 @@ function getBookOverrides() {
 function getFavorites() {
   const favorites = readJson(STORAGE_KEYS.favorites, []);
   return Array.isArray(favorites) ? favorites : [];
+}
+
+function getCurrentUserRole() {
+  return localStorage.getItem(STORAGE_KEYS.role) === "admin" ? "admin" : "user";
+}
+
+function isAdminUser() {
+  return getCurrentUserRole() === "admin";
 }
 
 function toggleFavorite(bookId) {
@@ -1339,6 +1387,22 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
+async function createPasswordHash(password) {
+  const encoded = new TextEncoder().encode(String(password || ""));
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function normalizeUsername(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9._-]/g, "");
+}
+
 async function initializeCloudSync() {
   if (backendState.initialized || backendState.loading) {
     return;
@@ -1458,30 +1522,40 @@ async function syncBookOverrideToCloud(bookId, override) {
     return false;
   }
 
+  if (!isAdminUser()) {
+    return false;
+  }
+
   const baseBook = getBookById(bookId);
   if (!baseBook) {
     return false;
   }
 
-  const payload = {
-    book_id: bookId,
-    title: resolveBookTitle(bookId, override.title, baseBook.title),
-    image: resolveBookImage(bookId, override.image, baseBook.image),
-    content: override.content ?? baseBook.content,
-    images: Array.isArray(override.images) ? override.images : [],
-    updated_at: new Date().toISOString(),
-    updated_by_name: localStorage.getItem(STORAGE_KEYS.username) || "Reader"
-  };
+  const storedUsername = localStorage.getItem(STORAGE_KEYS.username) || "";
+  const storedPassword = localStorage.getItem(STORAGE_KEYS.password) || "";
+  const passwordHash = await createPasswordHash(storedPassword);
 
-  const { error } = await client
-    .from(getStoriesTableName())
-    .upsert(payload, { onConflict: "book_id" });
+  const response = await client.rpc("upsert_story_admin", {
+    p_username: normalizeUsername(storedUsername),
+    p_password_hash: passwordHash,
+    p_book_id: bookId,
+    p_title: resolveBookTitle(bookId, override.title, baseBook.title),
+    p_image: resolveBookImage(bookId, override.image, baseBook.image),
+    p_content: override.content ?? baseBook.content,
+    p_images: Array.isArray(override.images) ? override.images : [],
+    p_updated_by_name: storedUsername || "Reader"
+  });
 
-  if (error) {
-    console.error("Shared story save failed:", error);
-    if (isRecoverableBackendError(error)) {
+  if (response.error) {
+    console.error("Shared story save failed:", response.error);
+    if (isRecoverableBackendError(response.error)) {
       disableBackendMode();
     }
+    return false;
+  }
+
+  if (!response.data?.success) {
+    console.error("Shared story save denied:", response.data?.message || "Unknown error");
     return false;
   }
 

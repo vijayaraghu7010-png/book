@@ -2,7 +2,9 @@ const AUTH_STORAGE_KEYS = {
   auth: "elibrary.auth",
   username: "elibrary.username",
   password: "elibrary.password",
-  loginAt: "elibrary.loginAt"
+  loginAt: "elibrary.loginAt",
+  role: "elibrary.role",
+  accessMode: "elibrary.accessMode"
 };
 
 const AUTH_QUOTES = [
@@ -60,14 +62,25 @@ function initializeLoginPage() {
   const loginForm = document.getElementById("loginForm");
   const usernameInput = document.getElementById("usernameInput");
   const passwordInput = document.getElementById("passwordInput");
+  const accessModeInput = document.getElementById("accessModeInput");
+  const accessEyebrow = document.getElementById("accessEyebrow");
+  const accessDescription = document.getElementById("accessDescription");
+  const accessButtons = document.querySelectorAll("[data-access-mode]");
 
-  if (!loginForm || !usernameInput || !passwordInput) {
+  if (!loginForm || !usernameInput || !passwordInput || !accessModeInput || !accessEyebrow || !accessDescription) {
     return;
   }
 
   quoteText.textContent = AUTH_QUOTES[Math.floor(Math.random() * AUTH_QUOTES.length)];
   usernameInput.value = localStorage.getItem(AUTH_STORAGE_KEYS.username) || "";
   passwordInput.value = localStorage.getItem(AUTH_STORAGE_KEYS.password) || "";
+  setAccessMode(localStorage.getItem(AUTH_STORAGE_KEYS.accessMode) || "user");
+
+  accessButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setAccessMode(button.dataset.accessMode || "user");
+    });
+  });
 
   loginForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -75,6 +88,7 @@ function initializeLoginPage() {
     const displayUsername = String(usernameInput.value || "").trim();
     const username = normalizeUsername(displayUsername);
     const password = passwordInput.value.trim();
+    const accessMode = accessModeInput.value === "admin" ? "admin" : "user";
 
     if (!username) {
       usernameInput.focus();
@@ -87,11 +101,13 @@ function initializeLoginPage() {
     }
 
     try {
-      await signInOrRegister(username, password, displayUsername);
+      const authResult = await signInOrRegister(username, password, displayUsername, accessMode);
 
       localStorage.setItem(AUTH_STORAGE_KEYS.auth, "true");
       localStorage.setItem(AUTH_STORAGE_KEYS.username, displayUsername);
       localStorage.setItem(AUTH_STORAGE_KEYS.password, password);
+      localStorage.setItem(AUTH_STORAGE_KEYS.role, authResult.role || "user");
+      localStorage.setItem(AUTH_STORAGE_KEYS.accessMode, accessMode);
 
       if (!localStorage.getItem(AUTH_STORAGE_KEYS.loginAt)) {
         localStorage.setItem(AUTH_STORAGE_KEYS.loginAt, new Date().toISOString());
@@ -103,32 +119,30 @@ function initializeLoginPage() {
       }, 220);
     } catch (error) {
       console.error(error);
-
-      if (isRecoverableBackendError(error)) {
-        localStorage.setItem(AUTH_STORAGE_KEYS.auth, "true");
-        localStorage.setItem(AUTH_STORAGE_KEYS.username, displayUsername);
-        localStorage.setItem(AUTH_STORAGE_KEYS.password, password);
-
-        if (!localStorage.getItem(AUTH_STORAGE_KEYS.loginAt)) {
-          localStorage.setItem(AUTH_STORAGE_KEYS.loginAt, new Date().toISOString());
-        }
-
-        document.body.classList.add("page-leaving");
-        window.setTimeout(() => {
-          window.location.href = "home.html";
-        }, 220);
-        return;
-      }
-
       alert(error.message || "Unable to sign in right now.");
     }
   });
+
+  function setAccessMode(mode) {
+    const nextMode = mode === "admin" ? "admin" : "user";
+    accessModeInput.value = nextMode;
+    localStorage.setItem(AUTH_STORAGE_KEYS.accessMode, nextMode);
+
+    accessButtons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.accessMode === nextMode);
+    });
+
+    accessEyebrow.textContent = nextMode === "admin" ? "Admin Access" : "User Access";
+    accessDescription.textContent = nextMode === "admin"
+      ? "Sign in as the admin to edit titles, stories, posters, and shared content for every reader."
+      : "Sign in as a user to read stories, browse favorites, and explore the library in read-only mode.";
+  }
 }
 
-async function signInOrRegister(username, password, displayUsername) {
+async function signInOrRegister(username, password, displayUsername, accessMode) {
   const client = getBackendClient();
   if (!client) {
-    return { mode: "local" };
+    throw new Error("Backend login is unavailable right now. Please reconnect Supabase and try again.");
   }
 
   const passwordHash = await createPasswordHash(password);
@@ -142,7 +156,18 @@ async function signInOrRegister(username, password, displayUsername) {
   }
 
   if (authResponse.data?.success) {
+    if (accessMode === "admin" && authResponse.data.role !== "admin") {
+      throw new Error("This account does not have admin access.");
+    }
     return authResponse.data;
+  }
+
+  if (authResponse.error && isRecoverableBackendError(authResponse.error)) {
+    throw authResponse.error;
+  }
+
+  if (accessMode === "admin") {
+    throw new Error("Invalid admin username or password.");
   }
 
   const registerResponse = await client.rpc("register_user", {
