@@ -5,7 +5,8 @@ const STORAGE_KEYS = {
   loginAt: "elibrary.loginAt",
   favorites: "elibrary.favorites",
   bookOverrides: "elibrary.bookOverrides",
-  currentBook: "elibrary.currentBook"
+  currentBook: "elibrary.currentBook",
+  posterMigrations: "elibrary.posterMigrations"
 };
 
 const loginQuotes = [
@@ -31,7 +32,7 @@ const libraryBooks = [
   {
     id: "midnight-archive",
     title: "The Midnight Archive",
-    image: "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1200&q=80",
+    image: "assets/midnight-archive-poster.jpeg",
     content: `By the time the city clocks reached midnight, the archive beneath Alder Street had already awakened. Cabinets clicked open on their own, drawers breathed out paper-cool air, and the brass lamps above the long reading tables flickered with a patience that felt almost human.
 
 Mira descended the spiral staircase with one key in her hand and a question she had carried for years. Her grandfather had spoken once, softly, of a room where unfinished stories waited for someone brave enough to complete them. He called it a mercy and a burden in the same breath.
@@ -150,6 +151,16 @@ By morning, Olen looked different from above: less like a place trapping its peo
   }
 ];
 
+const legacyBookImages = {
+  "midnight-archive": [
+    "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1200&q=80"
+  ]
+};
+
+const pinnedBookPosters = {
+  "midnight-archive": "assets/midnight-archive-poster.jpeg"
+};
+
 window.ELibraryApp = {
   boot
 };
@@ -161,6 +172,7 @@ function boot() {
 
   appBooted = true;
   initializeLoader();
+  runPosterMigrations();
   const page = document.body.dataset.page || "";
 
   if (!handleRouteAccess(page)) {
@@ -473,7 +485,9 @@ function initializeReaderPage() {
   const toggleEditorBtn = document.getElementById("toggleEditorBtn");
   const saveStoryBtn = document.getElementById("saveStoryBtn");
   const insertImageBtn = document.getElementById("insertImageBtn");
+  const changePosterBtn = document.getElementById("changePosterBtn");
   const imageUpload = document.getElementById("imageUpload");
+  const posterUpload = document.getElementById("posterUpload");
   const saveNote = document.getElementById("saveNote");
   const readerModeStatus = document.getElementById("readerModeStatus");
   const menuToggle = document.getElementById("menuToggle");
@@ -498,6 +512,7 @@ function initializeReaderPage() {
   const state = {
     bookId: book.id,
     title: book.title,
+    poster: book.image,
     contentDraft: book.content,
     images: cloneImages(book.images),
     editing: false,
@@ -523,25 +538,25 @@ function initializeReaderPage() {
     toggleEditorBtn.textContent = isEditing ? "Hide Editor" : "Toggle Editor";
   };
 
+  const persistBookState = () => {
+    saveBookOverride(state.bookId, {
+      image: state.poster,
+      content: state.contentDraft,
+      images: cloneImages(state.images)
+    });
+  };
+
   const renderStoryPreview = () => {
-    storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images);
+    storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images, state.poster);
     bindReaderMediaActions(state, storyContent, {
-      onPersist: () => {
-        saveBookOverride(state.bookId, {
-          content: state.contentDraft,
-          images: cloneImages(state.images)
-        });
-      },
+      onPersist: persistBookState,
       onFeedback: (message) => setFeedback(message, "success")
     });
   };
 
   const saveStoryChanges = (message) => {
     state.contentDraft = storyEditor.value;
-    saveBookOverride(state.bookId, {
-      content: state.contentDraft,
-      images: cloneImages(state.images)
-    });
+    persistBookState();
     renderStoryPreview();
     setEditingState(false);
     setFeedback(message || `Saved locally at ${formatShortTime(new Date())}.`, "success");
@@ -558,6 +573,7 @@ function initializeReaderPage() {
       }
 
       state.title = latestBook.title;
+      state.poster = latestBook.image;
       state.contentDraft = latestBook.content;
       state.images = cloneImages(latestBook.images);
       readerTitle.textContent = latestBook.title;
@@ -579,7 +595,9 @@ function initializeReaderPage() {
   });
 
   const openImagePicker = () => imageUpload.click();
+  const openPosterPicker = () => posterUpload?.click();
   insertImageBtn.addEventListener("click", openImagePicker);
+  changePosterBtn?.addEventListener("click", openPosterPicker);
 
   imageUpload.addEventListener("change", (event) => {
     const file = event.target.files && event.target.files[0];
@@ -591,10 +609,7 @@ function initializeReaderPage() {
     reader.onload = () => {
       createManagedImage(String(reader.result || ""), storyContent.clientWidth || 720, (imageData) => {
         state.images = [...state.images, imageData];
-        saveBookOverride(state.bookId, {
-          content: storyEditor.value,
-          images: cloneImages(state.images)
-        });
+        persistBookState();
         renderStoryPreview();
         setEditingState(true);
         setFeedback("Image inserted. Drag the lower-right handle to resize it.", "success");
@@ -602,6 +617,23 @@ function initializeReaderPage() {
     };
     reader.readAsDataURL(file);
     imageUpload.value = "";
+  });
+
+  posterUpload?.addEventListener("change", (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.poster = String(reader.result || "");
+      persistBookState();
+      renderStoryPreview();
+      setFeedback("Poster updated and saved for this book.", "success");
+    };
+    reader.readAsDataURL(file);
+    posterUpload.value = "";
   });
 
   if (menuToggle && readerMenu) {
@@ -630,6 +662,10 @@ function initializeReaderPage() {
 
       if (action === "image") {
         openImagePicker();
+      }
+
+      if (action === "poster") {
+        openPosterPicker();
       }
     });
 
@@ -831,7 +867,7 @@ function getMergedBook(bookId) {
   return {
     ...baseBook,
     title: overrideSource.title || baseBook.title,
-    image: overrideSource.image || baseBook.image,
+    image: resolveBookImage(bookId, overrideSource.image, baseBook.image),
     content: hasCustomContent ? overrideSource.content : baseBook.content,
     images: Array.isArray(overrideSource.images) ? cloneImages(overrideSource.images) : []
   };
@@ -839,6 +875,47 @@ function getMergedBook(bookId) {
 
 function getBookById(bookId) {
   return libraryBooks.find((book) => book.id === bookId) || null;
+}
+
+function runPosterMigrations() {
+  const migrationState = readJson(STORAGE_KEYS.posterMigrations, {});
+  const overrides = getBookOverrides();
+  let hasOverrideChanges = false;
+
+  Object.entries(pinnedBookPosters).forEach(([bookId, pinnedImage]) => {
+    if (migrationState[bookId] === pinnedImage) {
+      return;
+    }
+
+    const currentOverride = overrides[bookId] || {};
+    overrides[bookId] = {
+      ...currentOverride,
+      image: pinnedImage,
+      updatedAt: new Date().toISOString()
+    };
+    migrationState[bookId] = pinnedImage;
+    hasOverrideChanges = true;
+  });
+
+  if (hasOverrideChanges) {
+    localStorage.setItem(STORAGE_KEYS.bookOverrides, JSON.stringify(overrides));
+  }
+
+  localStorage.setItem(STORAGE_KEYS.posterMigrations, JSON.stringify(migrationState));
+}
+
+function resolveBookImage(bookId, overrideImage, baseImage) {
+  const nextImage = String(overrideImage || "").trim();
+  if (!nextImage) {
+    return baseImage;
+  }
+
+  const legacyImages = legacyBookImages[bookId] || [];
+  if (legacyImages.includes(nextImage) && nextImage !== baseImage) {
+    return baseImage;
+  }
+
+  return nextImage;
 }
 
 function saveBookOverride(bookId, value) {
@@ -931,7 +1008,11 @@ function getEditedBooks() {
   const cloudEntries = Object.entries(backendState.books).filter(([bookId]) => !Object.prototype.hasOwnProperty.call(getBookOverrides(), bookId));
 
   return [...localEntries, ...cloudEntries]
-    .filter(([, value]) => value && ((value.content && value.content.trim()) || (Array.isArray(value.images) && value.images.length)))
+    .filter(([, value]) => value && (
+      (typeof value.image === "string" && value.image.trim()) ||
+      (value.content && value.content.trim()) ||
+      (Array.isArray(value.images) && value.images.length)
+    ))
     .map(([bookId, value]) => ({
       book: getBookById(bookId),
       updatedAt: value.updatedAt
@@ -940,7 +1021,7 @@ function getEditedBooks() {
     .sort((left, right) => new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0));
 }
 
-function createReaderMarkup(title, content, images) {
+function createReaderMarkup(title, content, images, poster) {
   const paragraphs = splitStory(content);
   const imageQueue = [...images];
   const blocks = [];
@@ -959,9 +1040,12 @@ function createReaderMarkup(title, content, images) {
 
   return `
     <div class="story-header">
+      <div class="story-cover">
+        <img src="${escapeAttribute(poster)}" alt="${escapeAttribute(title)} poster" loading="lazy" decoding="async">
+      </div>
       <span class="book-tag">Live Reader</span>
       <h2>${escapeHtml(title)}</h2>
-      <p>Edit the story, insert images, and save your personalized version locally in the browser.</p>
+      <p>Edit the story, insert images, change the poster, and save your personalized version for every return visit.</p>
     </div>
     <div class="story-body">
       ${blocks.length ? blocks.join("") : '<div class="story-empty"><p>Your story is empty right now. Open the editor and start writing.</p></div>'}
@@ -1005,7 +1089,7 @@ function bindReaderMediaActions(state, storyContent, callbacks) {
     frame.querySelector("[data-remove-image]")?.addEventListener("click", () => {
       state.images = state.images.filter((image) => image.id !== imageId);
       onPersist();
-      storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images);
+      storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images, state.poster);
       bindReaderMediaActions(state, storyContent, callbacks);
       onFeedback("Image removed and saved locally.");
     });
@@ -1146,10 +1230,21 @@ async function loadSharedStoriesFromBackend() {
   }
 
   const nextBooks = {};
+  const pinnedUpdates = [];
   (data || []).forEach((row) => {
+    const pinnedImage = pinnedBookPosters[row.book_id];
+    if (pinnedImage && row.image !== pinnedImage) {
+      pinnedUpdates.push({
+        bookId: row.book_id,
+        image: pinnedImage,
+        content: row.content || "",
+        images: Array.isArray(row.images) ? row.images : []
+      });
+    }
+
     nextBooks[row.book_id] = {
       title: row.title || "",
-      image: row.image || "",
+      image: pinnedImage || row.image || "",
       content: row.content || "",
       images: Array.isArray(row.images) ? row.images : [],
       updatedAt: row.updated_at || null,
@@ -1159,6 +1254,7 @@ async function loadSharedStoriesFromBackend() {
 
   backendState.books = nextBooks;
   window.dispatchEvent(new CustomEvent("elibrary:cloud-sync"));
+  syncPinnedPostersToCloud(pinnedUpdates);
 }
 
 async function syncBookOverrideToCloud(bookId, override) {
@@ -1179,7 +1275,7 @@ async function syncBookOverrideToCloud(bookId, override) {
   const payload = {
     book_id: bookId,
     title: baseBook.title,
-    image: baseBook.image,
+    image: resolveBookImage(bookId, override.image, baseBook.image),
     content: override.content ?? baseBook.content,
     images: Array.isArray(override.images) ? override.images : [],
     updated_at: new Date().toISOString(),
@@ -1196,6 +1292,21 @@ async function syncBookOverrideToCloud(bookId, override) {
       disableBackendMode();
     }
   }
+}
+
+async function syncPinnedPostersToCloud(pinnedUpdates = []) {
+  const client = getSupabaseClient();
+  if (!client || !backendState.enabled) {
+    return;
+  }
+
+  pinnedUpdates.forEach(({ bookId, image, content, images }) => {
+    syncBookOverrideToCloud(bookId, {
+      image,
+      content,
+      images: cloneImages(images)
+    });
+  });
 }
 
 function getSupabaseClient() {
