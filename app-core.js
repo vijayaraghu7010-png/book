@@ -8,7 +8,8 @@ const STORAGE_KEYS = {
   favorites: "elibrary.favorites",
   bookOverrides: "elibrary.bookOverrides",
   currentBook: "elibrary.currentBook",
-  posterMigrations: "elibrary.posterMigrations"
+  posterMigrations: "elibrary.posterMigrations",
+  readingPointers: "elibrary.readingPointers"
 };
 
 const loginQuotes = [
@@ -549,9 +550,11 @@ function initializeReaderPage() {
     contentDraft: book.content,
     images: cloneImages(book.images),
     editing: false,
-    syncBound: false
+    syncBound: false,
+    readingPointerMounted: false
   };
   const canEdit = isAdminUser();
+  let readingPointerController = null;
 
   readerTitle.textContent = book.title;
   storyTitleInput.value = state.title;
@@ -618,11 +621,18 @@ function initializeReaderPage() {
   };
 
   const renderStoryPreview = () => {
+    readingPointerController?.destroy();
     storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images, state.poster);
     bindReaderMediaActions(state, storyContent, {
       onPersist: persistBookState,
       onFeedback: (message, tone = "success") => setFeedback(message, tone)
     });
+    readingPointerController = initializeReadingPointer({
+      storyContent,
+      bookId: state.bookId,
+      autoScroll: !state.readingPointerMounted
+    });
+    state.readingPointerMounted = true;
   };
 
   const saveStoryChanges = async (message) => {
@@ -1138,6 +1148,21 @@ function getBookOverrides() {
   return readJson(STORAGE_KEYS.bookOverrides, {});
 }
 
+function getReadingPointerState(bookId) {
+  const pointers = readJson(STORAGE_KEYS.readingPointers, {});
+  return pointers[bookId] || null;
+}
+
+function saveReadingPointerState(bookId, value) {
+  const pointers = readJson(STORAGE_KEYS.readingPointers, {});
+  pointers[bookId] = {
+    xRatio: clamp(Number(value?.xRatio) || 0.08, 0, 1),
+    yRatio: clamp(Number(value?.yRatio) || 0.1, 0, 1),
+    updatedAt: new Date().toISOString()
+  };
+  localStorage.setItem(STORAGE_KEYS.readingPointers, JSON.stringify(pointers));
+}
+
 function getFavorites() {
   const favorites = readJson(STORAGE_KEYS.favorites, []);
   return Array.isArray(favorites) ? favorites : [];
@@ -1247,6 +1272,177 @@ function getEditedBooks() {
     }))
     .filter((item) => item.book)
     .sort((left, right) => new Date(right.updatedAt || 0) - new Date(left.updatedAt || 0));
+}
+
+function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
+  if (!storyContent || !bookId) {
+    return null;
+  }
+
+  const readingArea = storyContent.querySelector(".story-body") || storyContent;
+  const marker = document.createElement("button");
+  marker.type = "button";
+  marker.className = "reading-pointer-marker";
+  marker.title = "Drag to adjust your reading position";
+  marker.setAttribute("aria-label", "Reading position marker. Drag to adjust your reading position.");
+  marker.innerHTML = `
+    <span class="reading-pointer-line" aria-hidden="true"></span>
+    <span class="reading-pointer-pen" aria-hidden="true"></span>
+    <span class="reading-pointer-tip" aria-hidden="true"></span>
+  `;
+  storyContent.appendChild(marker);
+
+  const existingPointerState = getReadingPointerState(bookId);
+  let pointerState = existingPointerState || {
+    xRatio: 0.08,
+    yRatio: 0.14
+  };
+
+  let isDragging = false;
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+  let scrollTimer = null;
+
+  const getBounds = () => {
+    const contentRect = storyContent.getBoundingClientRect();
+    const areaRect = readingArea.getBoundingClientRect();
+    const markerWidth = marker.offsetWidth || 132;
+    const markerHeight = marker.offsetHeight || 46;
+
+    return {
+      minX: 8,
+      maxX: Math.max(8, storyContent.clientWidth - markerWidth - 8),
+      minY: Math.max(8, areaRect.top - contentRect.top + 6),
+      maxY: Math.max(8, areaRect.bottom - contentRect.top - markerHeight - 6)
+    };
+  };
+
+  const applyPointerState = (nextState, persist = true) => {
+    const bounds = getBounds();
+    const x = bounds.minX + ((bounds.maxX - bounds.minX) * clamp(nextState.xRatio, 0, 1));
+    const y = bounds.minY + ((bounds.maxY - bounds.minY) * clamp(nextState.yRatio, 0, 1));
+
+    marker.style.left = `${Math.round(x)}px`;
+    marker.style.top = `${Math.round(y)}px`;
+    pointerState = {
+      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1),
+      yRatio: bounds.maxY === bounds.minY ? 0 : clamp((y - bounds.minY) / Math.max(bounds.maxY - bounds.minY, 1), 0, 1)
+    };
+
+    if (persist) {
+      saveReadingPointerState(bookId, pointerState);
+    }
+  };
+
+  const setPointerFromCoordinates = (clientX, clientY, persist = true) => {
+    const contentRect = storyContent.getBoundingClientRect();
+    const bounds = getBounds();
+    const rawX = clientX - contentRect.left - dragOffsetX;
+    const rawY = clientY - contentRect.top - dragOffsetY;
+    const x = clamp(rawX, bounds.minX, bounds.maxX);
+    const y = clamp(rawY, bounds.minY, bounds.maxY);
+
+    marker.style.left = `${Math.round(x)}px`;
+    marker.style.top = `${Math.round(y)}px`;
+    pointerState = {
+      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1),
+      yRatio: bounds.maxY === bounds.minY ? 0 : clamp((y - bounds.minY) / Math.max(bounds.maxY - bounds.minY, 1), 0, 1)
+    };
+
+    if (persist) {
+      saveReadingPointerState(bookId, pointerState);
+    }
+  };
+
+  const updatePointerFromViewport = () => {
+    if (isDragging) {
+      return;
+    }
+
+    const areaRect = readingArea.getBoundingClientRect();
+    const markerHeight = marker.offsetHeight || 46;
+    const viewportY = window.innerHeight * 0.36;
+    const relativeY = clamp(viewportY - areaRect.top - (markerHeight / 2), 0, Math.max(areaRect.height - markerHeight, 1));
+    const nextRatioY = clamp(relativeY / Math.max(areaRect.height - markerHeight, 1), 0, 1);
+    applyPointerState({
+      xRatio: pointerState.xRatio,
+      yRatio: nextRatioY
+    });
+  };
+
+  const queueViewportSave = () => {
+    window.clearTimeout(scrollTimer);
+    scrollTimer = window.setTimeout(updatePointerFromViewport, 140);
+  };
+
+  const onPointerMove = (event) => {
+    if (!isDragging) {
+      return;
+    }
+
+    setPointerFromCoordinates(event.clientX, event.clientY, false);
+  };
+
+  const onPointerUp = (event) => {
+    if (!isDragging) {
+      return;
+    }
+
+    isDragging = false;
+    marker.classList.remove("is-dragging");
+    setPointerFromCoordinates(event.clientX, event.clientY, true);
+    marker.releasePointerCapture?.(event.pointerId);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+  };
+
+  marker.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    isDragging = true;
+    marker.classList.add("is-dragging");
+    const markerRect = marker.getBoundingClientRect();
+    dragOffsetX = event.clientX - markerRect.left;
+    dragOffsetY = event.clientY - markerRect.top;
+    marker.setPointerCapture?.(event.pointerId);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  });
+
+  const handleResize = () => {
+    applyPointerState(pointerState, false);
+  };
+
+  const handlePageHide = () => {
+    saveReadingPointerState(bookId, pointerState);
+  };
+
+  window.addEventListener("scroll", queueViewportSave, { passive: true });
+  window.addEventListener("resize", handleResize);
+  window.addEventListener("pagehide", handlePageHide);
+
+  applyPointerState(pointerState);
+
+  if (autoScroll && existingPointerState) {
+    window.setTimeout(() => {
+      marker.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+      });
+    }, 220);
+  }
+
+  return {
+    destroy() {
+      window.clearTimeout(scrollTimer);
+      window.removeEventListener("scroll", queueViewportSave);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      saveReadingPointerState(bookId, pointerState);
+      marker.remove();
+    }
+  };
 }
 
 function createReaderMarkup(title, content, images, poster) {
