@@ -158,9 +158,9 @@ function sanitizeLegacyAuthState() {
 }
 
 async function signInOrRegister(username, password, displayUsername, accessMode) {
-  const client = getBackendClient();
+  const client = await waitForBackendClient();
   if (!client) {
-    throw new Error("Backend login is unavailable right now. Please reconnect Supabase and try again.");
+    throw new Error("Login service is still loading on this device. Please wait a moment and try again.");
   }
 
   const passwordHash = await createPasswordHash(password);
@@ -225,6 +225,27 @@ function getBackendClient() {
   }
 
   return authClient;
+}
+
+async function waitForBackendClient(timeoutMs = 7000, intervalMs = 160) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const client = getBackendClient();
+    if (client) {
+      return client;
+    }
+
+    await delay(intervalMs);
+  }
+
+  return null;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 async function createPasswordHash(password) {
