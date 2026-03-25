@@ -1155,12 +1155,49 @@ function getReadingPointerState(bookId) {
 
 function saveReadingPointerState(bookId, value) {
   const pointers = readJson(STORAGE_KEYS.readingPointers, {});
-  pointers[bookId] = {
+  pointers[bookId] = normalizeReadingPointerState(value);
+  localStorage.setItem(STORAGE_KEYS.readingPointers, JSON.stringify(pointers));
+}
+
+function normalizeReadingPointerState(value) {
+  return {
+    blockIndex: Math.max(0, Number(value?.blockIndex) || 0),
+    blockOffsetRatio: clamp(Number(value?.blockOffsetRatio) || 0, 0, 1),
     xRatio: clamp(Number(value?.xRatio) || 0.08, 0, 1),
-    yRatio: clamp(Number(value?.yRatio) || 0.1, 0, 1),
     updatedAt: new Date().toISOString()
   };
-  localStorage.setItem(STORAGE_KEYS.readingPointers, JSON.stringify(pointers));
+}
+
+function resolveReadingPointerState(value, blocks, readingArea) {
+  const normalized = normalizeReadingPointerState(value);
+  if (value && Number.isFinite(Number(value.blockIndex))) {
+    return normalized;
+  }
+
+  const safeBlocks = Array.isArray(blocks) ? blocks : [];
+  if (!safeBlocks.length) {
+    return normalized;
+  }
+
+  const totalHeight = Math.max(readingArea?.scrollHeight || 1, 1);
+  const targetY = clamp(Number(value?.yRatio) || 0.14, 0, 1) * totalHeight;
+  let matchedIndex = 0;
+  let matchedRatio = 0;
+
+  safeBlocks.forEach((block, index) => {
+    const top = block.offsetTop;
+    const height = Math.max(block.offsetHeight, 1);
+    if (targetY >= top && targetY <= top + height) {
+      matchedIndex = index;
+      matchedRatio = clamp((targetY - top) / height, 0, 1);
+    }
+  });
+
+  return normalizeReadingPointerState({
+    blockIndex: matchedIndex,
+    blockOffsetRatio: matchedRatio,
+    xRatio: value?.xRatio
+  });
 }
 
 function getFavorites() {
@@ -1280,6 +1317,7 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
   }
 
   const readingArea = storyContent.querySelector(".story-body") || storyContent;
+  const getBlocks = () => Array.from(readingArea.querySelectorAll("[data-reading-block]"));
   const marker = document.createElement("button");
   marker.type = "button";
   marker.className = "reading-pointer-marker";
@@ -1292,87 +1330,138 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
   `;
   storyContent.appendChild(marker);
 
+  const tooltip = document.createElement("div");
+  tooltip.className = "reading-pointer-tooltip";
+  tooltip.textContent = "Drag to adjust your reading position";
+  storyContent.appendChild(tooltip);
+
   const existingPointerState = getReadingPointerState(bookId);
-  let pointerState = existingPointerState || {
-    xRatio: 0.08,
-    yRatio: 0.14
-  };
+  let activeBlock = null;
+  let pointerState = resolveReadingPointerState(existingPointerState || {
+    blockIndex: 0,
+    blockOffsetRatio: 0.08,
+    xRatio: 0.08
+  }, getBlocks(), readingArea);
 
   let isDragging = false;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
-  let scrollTimer = null;
+  let dragPointerId = null;
+  let touchIdentifier = null;
 
   const getBounds = () => {
-    const contentRect = storyContent.getBoundingClientRect();
-    const areaRect = readingArea.getBoundingClientRect();
     const markerWidth = marker.offsetWidth || 132;
-    const markerHeight = marker.offsetHeight || 46;
-
     return {
       minX: 8,
-      maxX: Math.max(8, storyContent.clientWidth - markerWidth - 8),
-      minY: Math.max(8, areaRect.top - contentRect.top + 6),
-      maxY: Math.max(8, areaRect.bottom - contentRect.top - markerHeight - 6)
+      maxX: Math.max(8, storyContent.clientWidth - markerWidth - 8)
     };
   };
 
-  const applyPointerState = (nextState, persist = true) => {
-    const bounds = getBounds();
-    const x = bounds.minX + ((bounds.maxX - bounds.minX) * clamp(nextState.xRatio, 0, 1));
-    const y = bounds.minY + ((bounds.maxY - bounds.minY) * clamp(nextState.yRatio, 0, 1));
-
-    marker.style.left = `${Math.round(x)}px`;
-    marker.style.top = `${Math.round(y)}px`;
-    pointerState = {
-      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1),
-      yRatio: bounds.maxY === bounds.minY ? 0 : clamp((y - bounds.minY) / Math.max(bounds.maxY - bounds.minY, 1), 0, 1)
-    };
-
-    if (persist) {
-      saveReadingPointerState(bookId, pointerState);
-    }
-  };
-
-  const setPointerFromCoordinates = (clientX, clientY, persist = true) => {
-    const contentRect = storyContent.getBoundingClientRect();
-    const bounds = getBounds();
-    const rawX = clientX - contentRect.left - dragOffsetX;
-    const rawY = clientY - contentRect.top - dragOffsetY;
-    const x = clamp(rawX, bounds.minX, bounds.maxX);
-    const y = clamp(rawY, bounds.minY, bounds.maxY);
-
-    marker.style.left = `${Math.round(x)}px`;
-    marker.style.top = `${Math.round(y)}px`;
-    pointerState = {
-      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1),
-      yRatio: bounds.maxY === bounds.minY ? 0 : clamp((y - bounds.minY) / Math.max(bounds.maxY - bounds.minY, 1), 0, 1)
-    };
-
-    if (persist) {
-      saveReadingPointerState(bookId, pointerState);
-    }
-  };
-
-  const updatePointerFromViewport = () => {
-    if (isDragging) {
+  const highlightActiveBlock = (nextBlock) => {
+    if (activeBlock === nextBlock) {
       return;
     }
 
-    const areaRect = readingArea.getBoundingClientRect();
+    activeBlock?.classList.remove("is-reading-pointer-target");
+    activeBlock = nextBlock || null;
+    activeBlock?.classList.add("is-reading-pointer-target");
+  };
+
+  const applyPointerState = (nextState, persist = true) => {
+    const blocks = getBlocks();
+    if (!blocks.length) {
+      return;
+    }
+
+    const normalizedState = resolveReadingPointerState(nextState, blocks, readingArea);
+    const blockIndex = clamp(normalizedState.blockIndex, 0, blocks.length - 1);
+    const targetBlock = blocks[blockIndex];
+    const bounds = getBounds();
     const markerHeight = marker.offsetHeight || 46;
-    const viewportY = window.innerHeight * 0.36;
-    const relativeY = clamp(viewportY - areaRect.top - (markerHeight / 2), 0, Math.max(areaRect.height - markerHeight, 1));
-    const nextRatioY = clamp(relativeY / Math.max(areaRect.height - markerHeight, 1), 0, 1);
-    applyPointerState({
-      xRatio: pointerState.xRatio,
-      yRatio: nextRatioY
+    const availableHeight = Math.max(targetBlock.offsetHeight - markerHeight, 0);
+    const x = bounds.minX + ((bounds.maxX - bounds.minX) * clamp(normalizedState.xRatio, 0, 1));
+    const y = targetBlock.offsetTop + (availableHeight * clamp(normalizedState.blockOffsetRatio, 0, 1));
+
+    marker.style.left = `${Math.round(x)}px`;
+    marker.style.top = `${Math.round(y)}px`;
+    tooltip.style.left = `${Math.round(x + 6)}px`;
+    tooltip.style.top = `${Math.round(Math.max(8, y - 34))}px`;
+
+    pointerState = normalizeReadingPointerState({
+      blockIndex,
+      blockOffsetRatio: availableHeight === 0 ? 0 : clamp((y - targetBlock.offsetTop) / availableHeight, 0, 1),
+      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1)
+    });
+
+    highlightActiveBlock(targetBlock);
+
+    if (persist) {
+      saveReadingPointerState(bookId, pointerState);
+    }
+  };
+
+  const getClosestBlockStateFromCoordinates = (clientX, clientY) => {
+    const blocks = getBlocks();
+    const contentRect = storyContent.getBoundingClientRect();
+    const bounds = getBounds();
+    const markerHeight = marker.offsetHeight || 46;
+    const x = clamp(clientX - contentRect.left - dragOffsetX, bounds.minX, bounds.maxX);
+    const y = clientY - contentRect.top - dragOffsetY + (markerHeight / 2);
+
+    let matchedIndex = 0;
+    let matchedScore = Number.POSITIVE_INFINITY;
+
+    blocks.forEach((block, index) => {
+      const blockCenter = block.offsetTop + (block.offsetHeight / 2);
+      const score = Math.abs(y - blockCenter);
+      if (score < matchedScore) {
+        matchedScore = score;
+        matchedIndex = index;
+      }
+    });
+
+    const matchedBlock = blocks[matchedIndex];
+    const availableHeight = Math.max(matchedBlock.offsetHeight - markerHeight, 0);
+    const relativeOffset = clamp(y - matchedBlock.offsetTop - (markerHeight / 2), 0, Math.max(availableHeight, 1));
+
+    return normalizeReadingPointerState({
+      blockIndex: matchedIndex,
+      blockOffsetRatio: availableHeight === 0 ? 0 : clamp(relativeOffset / availableHeight, 0, 1),
+      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1)
     });
   };
 
-  const queueViewportSave = () => {
-    window.clearTimeout(scrollTimer);
-    scrollTimer = window.setTimeout(updatePointerFromViewport, 140);
+  const getViewportPointerState = () => {
+    const blocks = getBlocks();
+    if (!blocks.length) {
+      return pointerState;
+    }
+
+    const viewportY = window.innerHeight * 0.38;
+    let matchedIndex = 0;
+    let matchedScore = Number.POSITIVE_INFINITY;
+    let matchedOffsetRatio = 0;
+
+    blocks.forEach((block, index) => {
+      const rect = block.getBoundingClientRect();
+      const blockCenter = rect.top + (rect.height / 2);
+      const score = Math.abs(viewportY - blockCenter);
+      if (score < matchedScore) {
+        matchedScore = score;
+        matchedIndex = index;
+        matchedOffsetRatio = clamp((viewportY - rect.top) / Math.max(rect.height, 1), 0, 1);
+      }
+    });
+
+    return normalizeReadingPointerState({
+      blockIndex: matchedIndex,
+      blockOffsetRatio: matchedOffsetRatio,
+      xRatio: pointerState.xRatio
+    });
+  };
+
+  const onDragMove = (clientX, clientY) => {
+    applyPointerState(getClosestBlockStateFromCoordinates(clientX, clientY), false);
   };
 
   const onPointerMove = (event) => {
@@ -1380,45 +1469,120 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
       return;
     }
 
-    setPointerFromCoordinates(event.clientX, event.clientY, false);
+    event.preventDefault();
+    onDragMove(event.clientX, event.clientY);
   };
 
   const onPointerUp = (event) => {
-    if (!isDragging) {
+    if (!isDragging || (dragPointerId !== null && event.pointerId !== dragPointerId)) {
       return;
     }
 
+    event.preventDefault();
     isDragging = false;
+    dragPointerId = null;
     marker.classList.remove("is-dragging");
-    setPointerFromCoordinates(event.clientX, event.clientY, true);
+    document.body.classList.remove("reading-pointer-dragging");
+    applyPointerState(getClosestBlockStateFromCoordinates(event.clientX, event.clientY), true);
     marker.releasePointerCapture?.(event.pointerId);
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointercancel", onPointerUp);
   };
 
   marker.addEventListener("pointerdown", (event) => {
     event.preventDefault();
     isDragging = true;
+    dragPointerId = event.pointerId;
     marker.classList.add("is-dragging");
+    document.body.classList.add("reading-pointer-dragging");
     const markerRect = marker.getBoundingClientRect();
     dragOffsetX = event.clientX - markerRect.left;
     dragOffsetY = event.clientY - markerRect.top;
     marker.setPointerCapture?.(event.pointerId);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp);
   });
+
+  const getTouchPoint = (event) => {
+    const touches = Array.from(event.changedTouches || []);
+    return touches.find((touch) => touch.identifier === touchIdentifier) || touches[0] || null;
+  };
+
+  const onTouchMove = (event) => {
+    if (!isDragging) {
+      return;
+    }
+
+    const touch = getTouchPoint(event);
+    if (!touch) {
+      return;
+    }
+
+    event.preventDefault();
+    onDragMove(touch.clientX, touch.clientY);
+  };
+
+  const onTouchEnd = (event) => {
+    if (!isDragging) {
+      return;
+    }
+
+    const touch = getTouchPoint(event);
+    if (!touch) {
+      return;
+    }
+
+    event.preventDefault();
+    isDragging = false;
+    touchIdentifier = null;
+    marker.classList.remove("is-dragging");
+    document.body.classList.remove("reading-pointer-dragging");
+    applyPointerState(getClosestBlockStateFromCoordinates(touch.clientX, touch.clientY), true);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("touchend", onTouchEnd);
+    window.removeEventListener("touchcancel", onTouchEnd);
+  };
+
+  if (!window.PointerEvent) {
+    marker.addEventListener("touchstart", (event) => {
+      const touch = getTouchPoint(event);
+      if (!touch) {
+        return;
+      }
+
+      event.preventDefault();
+      isDragging = true;
+      touchIdentifier = touch.identifier;
+      marker.classList.add("is-dragging");
+      document.body.classList.add("reading-pointer-dragging");
+      const markerRect = marker.getBoundingClientRect();
+      dragOffsetX = touch.clientX - markerRect.left;
+      dragOffsetY = touch.clientY - markerRect.top;
+      window.addEventListener("touchmove", onTouchMove, { passive: false });
+      window.addEventListener("touchend", onTouchEnd, { passive: false });
+      window.addEventListener("touchcancel", onTouchEnd, { passive: false });
+    }, { passive: false });
+  }
 
   const handleResize = () => {
     applyPointerState(pointerState, false);
   };
 
   const handlePageHide = () => {
-    saveReadingPointerState(bookId, pointerState);
+    saveReadingPointerState(bookId, isDragging ? pointerState : getViewportPointerState());
   };
 
-  window.addEventListener("scroll", queueViewportSave, { passive: true });
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === "hidden") {
+      saveReadingPointerState(bookId, isDragging ? pointerState : getViewportPointerState());
+    }
+  };
+
   window.addEventListener("resize", handleResize);
   window.addEventListener("pagehide", handlePageHide);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
 
   applyPointerState(pointerState);
 
@@ -1433,13 +1597,19 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
 
   return {
     destroy() {
-      window.clearTimeout(scrollTimer);
-      window.removeEventListener("scroll", queueViewportSave);
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
+      document.body.classList.remove("reading-pointer-dragging");
+      highlightActiveBlock(null);
       saveReadingPointerState(bookId, pointerState);
+      tooltip.remove();
       marker.remove();
     }
   };
@@ -1451,7 +1621,7 @@ function createReaderMarkup(title, content, images, poster) {
   const blocks = [];
 
   paragraphs.forEach((paragraph, index) => {
-    blocks.push(`<p class="story-paragraph">${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`);
+    blocks.push(`<p class="story-paragraph" data-reading-block>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`);
 
     if (imageQueue.length && (index % 2 === 1 || index === paragraphs.length - 1)) {
       blocks.push(renderReaderImage(imageQueue.shift(), title));
@@ -1482,7 +1652,7 @@ function renderReaderImage(image, title) {
   const height = clamp(Number(image.height) || 260, 160, 1200);
 
   return `
-    <section class="story-media-item">
+    <section class="story-media-item" data-reading-block>
       <div class="story-media-frame" data-image-id="${escapeAttribute(image.id)}" style="width:${width}px; height:${height}px;">
         <button
           type="button"
