@@ -421,11 +421,14 @@ function initializeHomePage() {
   const searchInput = document.getElementById("searchInput");
   const showAllBooks = document.getElementById("showAllBooks");
   const showFavoriteBooks = document.getElementById("showFavoriteBooks");
+  const debouncedRefresh = createDebouncedFunction(() => {
+    refreshHomePageView();
+  }, 120);
 
   if (searchInput && !searchInput.dataset.bound) {
     searchInput.dataset.bound = "true";
     searchInput.addEventListener("input", () => {
-      refreshHomePageView();
+      debouncedRefresh();
     });
   }
 
@@ -519,6 +522,7 @@ function initializeReaderPage() {
   const saveStoryBtn = document.getElementById("saveStoryBtn");
   const insertImageBtn = document.getElementById("insertImageBtn");
   const changePosterBtn = document.getElementById("changePosterBtn");
+  const openAiPanelBtn = document.getElementById("openAiPanelBtn");
   const imageUpload = document.getElementById("imageUpload");
   const posterUpload = document.getElementById("posterUpload");
   const saveNote = document.getElementById("saveNote");
@@ -526,6 +530,18 @@ function initializeReaderPage() {
   const menuToggle = document.getElementById("menuToggle");
   const readerMenu = document.getElementById("readerMenu");
   const menuBox = menuToggle?.closest(".menu-box") || null;
+  const readerAiPanel = document.getElementById("readerAiPanel");
+  const aiStatusPill = document.getElementById("aiStatusPill");
+  const aiSummarizeBtn = document.getElementById("aiSummarizeBtn");
+  const aiGuideBtn = document.getElementById("aiGuideBtn");
+  const aiContinueBtn = document.getElementById("aiContinueBtn");
+  const aiPolishBtn = document.getElementById("aiPolishBtn");
+  const aiPromptInput = document.getElementById("aiPromptInput");
+  const aiAskBtn = document.getElementById("aiAskBtn");
+  const aiResultMeta = document.getElementById("aiResultMeta");
+  const aiResultText = document.getElementById("aiResultText");
+  const applyAiToEditorBtn = document.getElementById("applyAiToEditorBtn");
+  const copyAiResultBtn = document.getElementById("copyAiResultBtn");
 
   if (!storyContent || !readerTitle || !storyEditor || !storyTitleInput || !editorPanel) {
     return;
@@ -555,6 +571,9 @@ function initializeReaderPage() {
   };
   const canEdit = isAdminUser();
   let readingPointerController = null;
+  let previewRenderTimer = 0;
+  let pendingAiDraft = "";
+  let aiRequestActive = false;
 
   readerTitle.textContent = book.title;
   storyTitleInput.value = state.title;
@@ -621,6 +640,7 @@ function initializeReaderPage() {
   };
 
   const renderStoryPreview = () => {
+    window.clearTimeout(previewRenderTimer);
     readingPointerController?.destroy();
     storyContent.innerHTML = createReaderMarkup(state.title, state.contentDraft, state.images, state.poster);
     bindReaderMediaActions(state, storyContent, {
@@ -635,7 +655,63 @@ function initializeReaderPage() {
     state.readingPointerMounted = true;
   };
 
+  const schedulePreviewRender = () => {
+    window.clearTimeout(previewRenderTimer);
+    previewRenderTimer = window.setTimeout(() => {
+      renderStoryPreview();
+    }, 120);
+  };
+
+  const setAiStatus = (label, stateName = "checking") => {
+    if (!aiStatusPill) {
+      return;
+    }
+
+    aiStatusPill.textContent = label;
+    aiStatusPill.classList.remove("is-online", "is-offline", "is-checking");
+    aiStatusPill.classList.add(stateName === "online" ? "is-online" : stateName === "offline" ? "is-offline" : "is-checking");
+  };
+
+  const setAiResult = (text, meta, options = {}) => {
+    if (aiResultText) {
+      aiResultText.textContent = text || "No AI output received.";
+    }
+
+    if (aiResultMeta) {
+      aiResultMeta.textContent = meta || "AI response ready.";
+    }
+
+    pendingAiDraft = options.suggestedStory || "";
+    if (applyAiToEditorBtn) {
+      applyAiToEditorBtn.hidden = !(canEdit && pendingAiDraft);
+    }
+    if (copyAiResultBtn) {
+      copyAiResultBtn.hidden = !text;
+    }
+  };
+
+  const setAiBusy = (busy, label = "AI Working") => {
+    aiRequestActive = busy;
+    if (busy) {
+      setAiStatus(label, "checking");
+    }
+
+    [
+      aiSummarizeBtn,
+      aiGuideBtn,
+      aiContinueBtn,
+      aiPolishBtn,
+      aiAskBtn,
+      openAiPanelBtn
+    ].forEach((button) => {
+      if (button) {
+        button.disabled = busy;
+      }
+    });
+  };
+
   const saveStoryChanges = async (message) => {
+    window.clearTimeout(previewRenderTimer);
     state.title = storyTitleInput.value.trim() || getBookById(state.bookId)?.title || state.title;
     state.contentDraft = storyEditor.value;
     readerTitle.textContent = state.title;
@@ -666,6 +742,8 @@ function initializeReaderPage() {
     readerModeStatus.textContent = "Read Only";
     setFeedback("User mode is read-only. Sign in as admin to edit titles, stories, posters, or images.");
   }
+
+  setAiStatus(getAIFunctionName() ? "AI Ready" : "AI Setup Needed", getAIFunctionName() ? "online" : "offline");
 
   if (!state.syncBound) {
     state.syncBound = true;
@@ -701,12 +779,12 @@ function initializeReaderPage() {
   storyTitleInput.addEventListener("input", (event) => {
     state.title = event.target.value.trim() || getBookById(state.bookId)?.title || state.title;
     readerTitle.textContent = state.title;
-    renderStoryPreview();
+    schedulePreviewRender();
   });
 
   storyEditor.addEventListener("input", (event) => {
     state.contentDraft = event.target.value;
-    renderStoryPreview();
+    schedulePreviewRender();
   });
 
   const openImagePicker = () => imageUpload.click();
@@ -765,6 +843,98 @@ function initializeReaderPage() {
     posterUpload.value = "";
   });
 
+  openAiPanelBtn?.addEventListener("click", () => {
+    readerAiPanel?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+    aiPromptInput?.focus();
+  });
+
+  const runAiAction = async (action, prompt = "") => {
+    if (aiRequestActive) {
+      return;
+    }
+
+    const effectivePrompt = String(prompt || aiPromptInput?.value || "").trim();
+    setAiBusy(true);
+    setAiResult("Thinking...", "OpenAI is working on your request.");
+
+    try {
+      const response = await requestReaderAI({
+        action,
+        prompt: effectivePrompt,
+        story: {
+          bookId: state.bookId,
+          title: state.title,
+          content: state.contentDraft,
+          poster: state.poster,
+          images: cloneImages(state.images)
+        }
+      });
+
+      setAiResult(
+        response.text,
+        response.meta || "AI response ready.",
+        { suggestedStory: response.suggestedStory }
+      );
+      setAiStatus("AI Ready", "online");
+    } catch (error) {
+      console.error(error);
+      setAiResult(
+        "AI is not available yet on this site. Deploy the Supabase Edge Function and add your OpenAI key to activate these tools.",
+        error?.message || "AI request failed.",
+        { suggestedStory: "" }
+      );
+      setAiStatus("AI Offline", "offline");
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
+  aiSummarizeBtn?.addEventListener("click", () => runAiAction("summarize"));
+  aiGuideBtn?.addEventListener("click", () => runAiAction("guide"));
+  aiContinueBtn?.addEventListener("click", () => runAiAction("continue"));
+  aiPolishBtn?.addEventListener("click", () => runAiAction("polish"));
+
+  aiAskBtn?.addEventListener("click", () => {
+    runAiAction("ask", aiPromptInput?.value || "");
+  });
+
+  aiPromptInput?.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      runAiAction("ask", aiPromptInput.value);
+    }
+  });
+
+  applyAiToEditorBtn?.addEventListener("click", () => {
+    if (!pendingAiDraft) {
+      return;
+    }
+
+    state.contentDraft = pendingAiDraft;
+    storyEditor.value = pendingAiDraft;
+    setEditingState(true);
+    schedulePreviewRender();
+    setFeedback("AI draft added to the editor. Save changes to sync it for all users.", "success");
+  });
+
+  copyAiResultBtn?.addEventListener("click", async () => {
+    if (!aiResultText?.textContent) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(aiResultText.textContent);
+      if (aiResultMeta) {
+        aiResultMeta.textContent = "AI result copied to clipboard.";
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  });
+
   if (menuToggle && readerMenu) {
     menuToggle.addEventListener("click", () => {
       readerMenu.classList.toggle("open");
@@ -801,6 +971,14 @@ function initializeReaderPage() {
 
       if (action === "poster") {
         openPosterPicker();
+      }
+
+      if (action === "ai") {
+        readerAiPanel?.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+        aiPromptInput?.focus();
       }
     });
 
@@ -2163,6 +2341,59 @@ function getStoriesTableName() {
   return window.E_LIBRARY_SUPABASE_CONFIG?.storiesTable || "stories";
 }
 
+function getAIFunctionName() {
+  if (window.E_LIBRARY_SUPABASE_CONFIG?.aiEnabled === false) {
+    return "";
+  }
+
+  return window.E_LIBRARY_SUPABASE_CONFIG?.aiFunctionName || "elibrary-ai";
+}
+
+async function requestReaderAI({ action, prompt, story }) {
+  const client = getSupabaseClient();
+  const functionName = getAIFunctionName();
+  if (!client || !functionName) {
+    throw new Error("AI setup is not complete yet.");
+  }
+
+  const storedUsername = localStorage.getItem(STORAGE_KEYS.username) || "";
+  const storedPassword = localStorage.getItem(STORAGE_KEYS.password) || "";
+  if (!storedUsername || !storedPassword) {
+    throw new Error("Please sign in again before using AI tools.");
+  }
+
+  const passwordHash = await createPasswordHash(storedPassword);
+  const response = await client.functions.invoke(functionName, {
+    body: {
+      action,
+      prompt: String(prompt || ""),
+      auth: {
+        username: normalizeUsername(storedUsername),
+        displayName: storedUsername,
+        passwordHash,
+        role: getCurrentUserRole()
+      },
+      story: {
+        bookId: story.bookId,
+        title: story.title,
+        content: story.content,
+        poster: story.poster,
+        images: Array.isArray(story.images) ? story.images : []
+      }
+    }
+  });
+
+  if (response.error) {
+    throw response.error;
+  }
+
+  if (!response.data?.success) {
+    throw new Error(response.data?.message || "AI request failed.");
+  }
+
+  return response.data;
+}
+
 function isRecoverableBackendError(error) {
   const message = String(error?.message || error?.details || error || "").toLowerCase();
   return (
@@ -2188,4 +2419,15 @@ function disableBackendMode() {
     window.E_LIBRARY_SUPABASE_CONFIG.enabled = false;
   }
   updateCloudSyncIndicators();
+}
+
+function createDebouncedFunction(callback, delayMs = 120) {
+  let timeoutId = 0;
+
+  return (...args) => {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => {
+      callback(...args);
+    }, delayMs);
+  };
 }

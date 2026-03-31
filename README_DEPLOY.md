@@ -11,6 +11,7 @@
   - `app.css`
   - `app-core.js`
   - `auth-core.js`
+  - `site-core.js`
 - Separate page wrappers:
   - `index.html`, `index.css`, `index.js`
   - `home.html`, `home.css`, `home.js`
@@ -22,6 +23,8 @@
   - `supabase-config.js`
 - Supabase SQL setup:
   - `SUPABASE_SETUP.sql`
+- Supabase Edge Function for AI:
+  - `supabase/functions/elibrary-ai/index.ts`
 
 ## How backend login works
 
@@ -47,6 +50,26 @@ without using the old email-confirmation flow.
    - anon/publishable key
 6. Set `enabled: true`
 
+## OpenAI setup
+
+The site uses GitHub Pages for the frontend, so OpenAI must stay on the backend.
+
+1. In Supabase, keep the `elibrary-ai` Edge Function from this repo
+2. Add a secret:
+   - `OPENAI_API_KEY`
+3. Optional:
+   - `OPENAI_MODEL`
+   - default is `gpt-5.4-mini`
+4. Deploy the function:
+   - `supabase functions deploy elibrary-ai`
+5. Keep `verify_jwt = false` for this function because this project uses its own username/password backend flow instead of Supabase Auth JWT sessions
+
+After that, the reader page AI panel can:
+- summarize stories
+- create reading notes
+- answer custom prompts
+- continue/polish story drafts for admin
+
 ## GitHub Pages deploy
 
 1. Create a GitHub repository
@@ -63,3 +86,4 @@ without using the old email-confirmation flow.
 - Backend story sync uses the Supabase `stories` table
 - Backend login uses the `library_users` table and RPC functions
 - Username/password are also remembered locally in the browser because you requested auto-fill
+- OpenAI keys must never be placed in frontend files like `app-core.js` or HTML pages

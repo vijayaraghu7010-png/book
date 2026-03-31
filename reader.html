@@ -37,6 +37,7 @@
             <button type="button" data-action="save">Save changes</button>
             <button type="button" data-action="image">Insert image</button>
             <button type="button" data-action="poster">Change poster</button>
+            <button type="button" data-action="ai">Open AI</button>
           </div>
         </div>
       </div>
@@ -49,6 +50,7 @@
           <button type="button" class="secondary-btn" id="changeTitleBtn" data-admin-only>Change Title</button>
           <button type="button" class="secondary-btn" id="insertImageBtn" data-admin-only>Insert Image</button>
           <button type="button" class="secondary-btn" id="changePosterBtn" data-admin-only>Change Poster</button>
+          <button type="button" class="secondary-btn" id="openAiPanelBtn">Open AI</button>
         </div>
         <span class="save-note" id="saveNote">Changes save for all users only when Cloud Sync is ON.</span>
         <input type="file" id="imageUpload" accept="image/*" hidden>
@@ -65,12 +67,46 @@
         </div>
       </section>
 
+      <section class="ai-panel glass-inner" id="readerAiPanel">
+        <div class="ai-panel-head">
+          <div>
+            <p class="eyebrow">OpenAI Reader Studio</p>
+            <h2>Smart story tools</h2>
+          </div>
+          <span class="status-pill" id="aiStatusPill">AI Ready</span>
+        </div>
+
+        <div class="ai-actions">
+          <button type="button" class="filter-chip active" id="aiSummarizeBtn">Summarize</button>
+          <button type="button" class="filter-chip" id="aiGuideBtn">Study Notes</button>
+          <button type="button" class="filter-chip" id="aiContinueBtn" data-admin-only>Continue Story</button>
+          <button type="button" class="filter-chip" id="aiPolishBtn" data-admin-only>Polish Writing</button>
+        </div>
+
+        <label class="ai-input-group" for="aiPromptInput">
+          <span>Ask AI</span>
+          <textarea id="aiPromptInput" placeholder="Ask for a summary, plot ideas, title suggestions, mood analysis, or reading guidance..."></textarea>
+        </label>
+
+        <div class="ai-panel-actions">
+          <button type="button" class="primary-btn" id="aiAskBtn">Run AI</button>
+          <button type="button" class="secondary-btn" id="applyAiToEditorBtn" data-admin-only hidden>Apply To Editor</button>
+          <button type="button" class="secondary-btn" id="copyAiResultBtn" hidden>Copy Result</button>
+        </div>
+
+        <div class="ai-result-card" id="aiResultCard">
+          <p class="ai-result-meta" id="aiResultMeta">AI responses appear here. Shared edits still require admin save.</p>
+          <pre class="ai-result-text" id="aiResultText">AI is ready. Choose an action or ask a custom prompt.</pre>
+        </div>
+      </section>
+
       <article class="story-content" id="storyContent"></article>
     </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
   <script src="supabase-config.js" defer></script>
+  <script src="site-core.js" defer></script>
   <script src="app-core.js" defer></script>
   <script src="reader.js" defer></script>
 </body>
