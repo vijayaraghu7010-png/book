@@ -1028,6 +1028,7 @@ body.page-leaving .page-shell {
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--line-soft);
+  overflow-wrap: anywhere;
 }
 
 .story-header {
@@ -1075,6 +1076,7 @@ body.page-leaving .page-shell {
 .story-body {
   display: grid;
   gap: 1rem;
+  align-content: start;
 }
 
 .reading-pointer-marker {
@@ -1192,6 +1194,8 @@ body.page-leaving .page-shell {
   font-size: 1.02rem;
   color: #deebf7;
   line-height: 1.85;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 [data-reading-block] {
@@ -1208,6 +1212,7 @@ body.page-leaving .page-shell {
 .story-media-item {
   display: flex;
   justify-content: flex-start;
+  width: 100%;
 }
 
 .story-media-frame {
@@ -1503,8 +1508,13 @@ body.page-leaving .page-shell {
     font-size: 2.55rem;
   }
 
+  .story-header {
+    gap: 0.8rem;
+  }
+
   .story-cover {
     width: 100%;
+    aspect-ratio: 5 / 4;
   }
 
   .book-card h3,
@@ -1518,6 +1528,16 @@ body.page-leaving .page-shell {
 
   .story-content {
     padding: 1rem;
+  }
+
+  .story-header p,
+  .story-paragraph {
+    font-size: 0.98rem;
+    line-height: 1.8;
+  }
+
+  .story-media-frame {
+    min-width: 0;
   }
 
   .reading-pointer-marker {

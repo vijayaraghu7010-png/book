@@ -1586,11 +1586,21 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
 
   applyPointerState(pointerState);
 
-  if (autoScroll && existingPointerState) {
+  const shouldAutoScrollToSavedPoint = Boolean(
+    existingPointerState
+    && (pointerState.blockIndex > 0 || pointerState.blockOffsetRatio > 0.22)
+  );
+
+  if (autoScroll && shouldAutoScrollToSavedPoint) {
     window.setTimeout(() => {
-      marker.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
+      const markerTop = marker.getBoundingClientRect().top + window.scrollY;
+      const viewportOffset = window.innerWidth <= 640
+        ? window.innerHeight * 0.16
+        : window.innerHeight * 0.28;
+
+      window.scrollTo({
+        top: Math.max(0, markerTop - viewportOffset),
+        behavior: "smooth"
       });
     }, 220);
   }
@@ -1749,10 +1759,82 @@ function bindReaderMediaActions(state, storyContent, callbacks) {
 }
 
 function splitStory(content) {
-  return String(content || "")
+  const normalized = String(content || "")
+    .replace(/\r\n?/g, "\n")
+    .trim();
+
+  if (!normalized) {
+    return [];
+  }
+
+  return normalized
     .split(/\n{2,}/)
+    .flatMap((paragraph) => paragraph.split(/\n(?=\S)/))
     .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .flatMap((paragraph) => chunkStoryParagraph(paragraph));
+}
+
+function chunkStoryParagraph(paragraph) {
+  const compact = String(paragraph || "").replace(/\s+/g, " ").trim();
+  const maxLength = 420;
+
+  if (!compact) {
+    return [];
+  }
+
+  if (compact.length <= maxLength) {
+    return [compact];
+  }
+
+  const sentences = compact.match(/[^.!?]+(?:[.!?]+|$)/g)?.map((part) => part.trim()).filter(Boolean) || [compact];
+  const chunks = [];
+  let current = "";
+
+  const pushChunk = () => {
+    if (current.trim()) {
+      chunks.push(current.trim());
+      current = "";
+    }
+  };
+
+  sentences.forEach((sentence) => {
+    if (sentence.length > maxLength) {
+      pushChunk();
+
+      const words = sentence.split(/\s+/);
+      let longChunk = "";
+
+      words.forEach((word) => {
+        const candidate = longChunk ? `${longChunk} ${word}` : word;
+        if (candidate.length > maxLength && longChunk) {
+          chunks.push(longChunk.trim());
+          longChunk = word;
+          return;
+        }
+
+        longChunk = candidate;
+      });
+
+      if (longChunk.trim()) {
+        chunks.push(longChunk.trim());
+      }
+
+      return;
+    }
+
+    const nextChunk = current ? `${current} ${sentence}` : sentence;
+    if (nextChunk.length > maxLength && current) {
+      pushChunk();
+      current = sentence;
+      return;
+    }
+
+    current = nextChunk;
+  });
+
+  pushChunk();
+  return chunks;
 }
 
 function createManagedImage(source, containerWidth, callback) {
