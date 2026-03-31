@@ -1378,6 +1378,9 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
   let dragOffsetY = 0;
   let dragPointerId = null;
   let touchIdentifier = null;
+  let autoScrollFrame = 0;
+  let lastDragClientX = 0;
+  let lastDragClientY = 0;
 
   const getBounds = () => {
     const markerWidth = marker.offsetWidth || 132;
@@ -1385,6 +1388,62 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
       minX: 8,
       maxX: Math.max(8, storyContent.clientWidth - markerWidth - 8)
     };
+  };
+
+  const scrollMarkerIntoView = (behavior = "smooth") => {
+    const markerTop = marker.getBoundingClientRect().top + window.scrollY;
+    const viewportOffset = window.innerWidth <= 640
+      ? window.innerHeight * 0.16
+      : window.innerHeight * 0.28;
+
+    window.scrollTo({
+      top: Math.max(0, markerTop - viewportOffset),
+      behavior
+    });
+  };
+
+  const stopAutoScrollLoop = () => {
+    if (autoScrollFrame) {
+      window.cancelAnimationFrame(autoScrollFrame);
+      autoScrollFrame = 0;
+    }
+  };
+
+  const stepAutoScroll = () => {
+    if (!isDragging) {
+      stopAutoScrollLoop();
+      return;
+    }
+
+    const edgeZone = Math.min(140, Math.max(84, window.innerHeight * 0.14));
+    let deltaY = 0;
+
+    if (lastDragClientY < edgeZone) {
+      deltaY = -Math.ceil(((edgeZone - lastDragClientY) / edgeZone) * 20);
+    } else if (lastDragClientY > window.innerHeight - edgeZone) {
+      deltaY = Math.ceil(((lastDragClientY - (window.innerHeight - edgeZone)) / edgeZone) * 20);
+    }
+
+    if (deltaY !== 0) {
+      window.scrollBy({
+        top: deltaY,
+        left: 0,
+        behavior: "auto"
+      });
+      onDragMove(lastDragClientX, lastDragClientY);
+      autoScrollFrame = window.requestAnimationFrame(stepAutoScroll);
+      return;
+    }
+
+    stopAutoScrollLoop();
+  };
+
+  const startAutoScrollLoop = () => {
+    if (autoScrollFrame) {
+      return;
+    }
+
+    autoScrollFrame = window.requestAnimationFrame(stepAutoScroll);
   };
 
   const highlightActiveBlock = (nextBlock) => {
@@ -1468,7 +1527,10 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
   };
 
   const onDragMove = (clientX, clientY) => {
+    lastDragClientX = clientX;
+    lastDragClientY = clientY;
     applyPointerState(getClosestBlockStateFromCoordinates(clientX, clientY), false);
+    startAutoScrollLoop();
   };
 
   const onPointerMove = (event) => {
@@ -1488,6 +1550,7 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
     event.preventDefault();
     isDragging = false;
     dragPointerId = null;
+    stopAutoScrollLoop();
     marker.classList.remove("is-dragging");
     document.body.classList.remove("reading-pointer-dragging");
     applyPointerState(getClosestBlockStateFromCoordinates(event.clientX, event.clientY), true);
@@ -1506,6 +1569,8 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
     const markerRect = marker.getBoundingClientRect();
     dragOffsetX = event.clientX - markerRect.left;
     dragOffsetY = event.clientY - markerRect.top;
+    lastDragClientX = event.clientX;
+    lastDragClientY = event.clientY;
     marker.setPointerCapture?.(event.pointerId);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
@@ -1544,6 +1609,7 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
     event.preventDefault();
     isDragging = false;
     touchIdentifier = null;
+    stopAutoScrollLoop();
     marker.classList.remove("is-dragging");
     document.body.classList.remove("reading-pointer-dragging");
     applyPointerState(getClosestBlockStateFromCoordinates(touch.clientX, touch.clientY), true);
@@ -1567,6 +1633,8 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
       const markerRect = marker.getBoundingClientRect();
       dragOffsetX = touch.clientX - markerRect.left;
       dragOffsetY = touch.clientY - markerRect.top;
+      lastDragClientX = touch.clientX;
+      lastDragClientY = touch.clientY;
       window.addEventListener("touchmove", onTouchMove, { passive: false });
       window.addEventListener("touchend", onTouchEnd, { passive: false });
       window.addEventListener("touchcancel", onTouchEnd, { passive: false });
@@ -1600,17 +1668,15 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
 
   if (autoScroll && shouldAutoScrollToSavedPoint) {
     window.setTimeout(() => {
-      const markerTop = marker.getBoundingClientRect().top + window.scrollY;
-      const viewportOffset = window.innerWidth <= 640
-        ? window.innerHeight * 0.16
-        : window.innerHeight * 0.28;
-
-      window.scrollTo({
-        top: Math.max(0, markerTop - viewportOffset),
-        behavior: "smooth"
-      });
+      scrollMarkerIntoView("smooth");
     }, 220);
   }
+
+  marker.addEventListener("click", () => {
+    if (!isDragging) {
+      scrollMarkerIntoView("smooth");
+    }
+  });
 
   return {
     destroy() {
@@ -1623,6 +1689,7 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("touchcancel", onTouchEnd);
+      stopAutoScrollLoop();
       document.body.classList.remove("reading-pointer-dragging");
       highlightActiveBlock(null);
       saveReadingPointerState(bookId, pointerState);
