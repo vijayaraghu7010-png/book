@@ -1164,12 +1164,41 @@ function normalizeReadingPointerState(value) {
     blockIndex: Math.max(0, Number(value?.blockIndex) || 0),
     blockOffsetRatio: clamp(Number(value?.blockOffsetRatio) || 0, 0, 1),
     xRatio: clamp(Number(value?.xRatio) || 0.08, 0, 1),
+    areaRatio: clamp(Number(value?.areaRatio) || 0, 0, 1),
     updatedAt: new Date().toISOString()
   };
 }
 
 function resolveReadingPointerState(value, blocks, readingArea) {
   const normalized = normalizeReadingPointerState(value);
+  if (value && Number.isFinite(Number(value.areaRatio))) {
+    const safeBlocks = Array.isArray(blocks) ? blocks : [];
+    if (!safeBlocks.length) {
+      return normalized;
+    }
+
+    const totalHeight = Math.max((readingArea?.scrollHeight || readingArea?.clientHeight || 1), 1);
+    const targetY = clamp(Number(value.areaRatio) || 0, 0, 1) * totalHeight;
+    let matchedIndex = 0;
+    let matchedRatio = 0;
+
+    safeBlocks.forEach((block, index) => {
+      const start = block.offsetTop;
+      const end = start + Math.max(block.offsetHeight, 1);
+      if (targetY >= start && targetY <= end) {
+        matchedIndex = index;
+        matchedRatio = clamp((targetY - start) / Math.max(block.offsetHeight, 1), 0, 1);
+      }
+    });
+
+    return normalizeReadingPointerState({
+      blockIndex: matchedIndex,
+      blockOffsetRatio: matchedRatio,
+      xRatio: value?.xRatio,
+      areaRatio: value?.areaRatio
+    });
+  }
+
   if (value && Number.isFinite(Number(value.blockIndex))) {
     return normalized;
   }
@@ -1196,7 +1225,8 @@ function resolveReadingPointerState(value, blocks, readingArea) {
   return normalizeReadingPointerState({
     blockIndex: matchedIndex,
     blockOffsetRatio: matchedRatio,
-    xRatio: value?.xRatio
+    xRatio: value?.xRatio,
+    areaRatio: clamp(targetY / totalHeight, 0, 1)
   });
 }
 
@@ -1390,7 +1420,12 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
     pointerState = normalizeReadingPointerState({
       blockIndex,
       blockOffsetRatio: availableHeight === 0 ? 0 : clamp((y - targetBlock.offsetTop) / availableHeight, 0, 1),
-      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1)
+      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1),
+      areaRatio: clamp(
+        (y + (markerHeight / 2)) / Math.max(readingArea.scrollHeight || readingArea.clientHeight || 1, 1),
+        0,
+        1
+      )
     });
 
     highlightActiveBlock(targetBlock);
@@ -1427,36 +1462,8 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
     return normalizeReadingPointerState({
       blockIndex: matchedIndex,
       blockOffsetRatio: availableHeight === 0 ? 0 : clamp(relativeOffset / availableHeight, 0, 1),
-      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1)
-    });
-  };
-
-  const getViewportPointerState = () => {
-    const blocks = getBlocks();
-    if (!blocks.length) {
-      return pointerState;
-    }
-
-    const viewportY = window.innerHeight * 0.38;
-    let matchedIndex = 0;
-    let matchedScore = Number.POSITIVE_INFINITY;
-    let matchedOffsetRatio = 0;
-
-    blocks.forEach((block, index) => {
-      const rect = block.getBoundingClientRect();
-      const blockCenter = rect.top + (rect.height / 2);
-      const score = Math.abs(viewportY - blockCenter);
-      if (score < matchedScore) {
-        matchedScore = score;
-        matchedIndex = index;
-        matchedOffsetRatio = clamp((viewportY - rect.top) / Math.max(rect.height, 1), 0, 1);
-      }
-    });
-
-    return normalizeReadingPointerState({
-      blockIndex: matchedIndex,
-      blockOffsetRatio: matchedOffsetRatio,
-      xRatio: pointerState.xRatio
+      xRatio: bounds.maxX === bounds.minX ? 0 : clamp((x - bounds.minX) / Math.max(bounds.maxX - bounds.minX, 1), 0, 1),
+      areaRatio: clamp(y / Math.max(readingArea.scrollHeight || readingArea.clientHeight || 1, 1), 0, 1)
     });
   };
 
@@ -1571,12 +1578,12 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
   };
 
   const handlePageHide = () => {
-    saveReadingPointerState(bookId, isDragging ? pointerState : getViewportPointerState());
+    saveReadingPointerState(bookId, pointerState);
   };
 
   const handleVisibilityChange = () => {
     if (document.visibilityState === "hidden") {
-      saveReadingPointerState(bookId, isDragging ? pointerState : getViewportPointerState());
+      saveReadingPointerState(bookId, pointerState);
     }
   };
 
@@ -1588,7 +1595,7 @@ function initializeReadingPointer({ storyContent, bookId, autoScroll }) {
 
   const shouldAutoScrollToSavedPoint = Boolean(
     existingPointerState
-    && (pointerState.blockIndex > 0 || pointerState.blockOffsetRatio > 0.22)
+    && (pointerState.areaRatio > 0.04 || pointerState.blockIndex > 0 || pointerState.blockOffsetRatio > 0.12)
   );
 
   if (autoScroll && shouldAutoScrollToSavedPoint) {
