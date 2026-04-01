@@ -1,90 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>E-Library | Login</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="index.css">
-</head>
-<body class="page login-page" data-page="login">
-  <div class="loader-overlay" id="loaderOverlay" aria-hidden="true">
-    <div class="loader-core"></div>
-    <p>Opening your reading room...</p>
-  </div>
-
-  <main class="login-shell page-shell">
-    <section class="login-layout glass-panel">
-      <div class="login-copy">
-        <div class="login-copy-main">
-          <span class="brand-pill">E-Library</span>
-          <p class="eyebrow">Premium Digital Reading Lounge</p>
-          <h1>Read beautifully. Organize effortlessly.</h1>
-          <p class="lead-copy">
-            Discover immersive fiction, save favorite stories, personalize your reading experience, and continue every chapter from a polished private dashboard.
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vellichor Vault | Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./app.css" />
+    <link rel="stylesheet" href="./index.css" />
+  </head>
+  <body>
+    <main class="auth-shell">
+      <section class="auth-hero glass-card">
+        <div class="auth-brand">
+          <img src="./assets/library-mark.svg" alt="Vellichor Vault logo" class="brand-mark" />
+          <div>
+            <p class="eyebrow">Premium Digital Reading</p>
+            <h1>Vellichor Vault</h1>
+          </div>
+        </div>
+        <div class="hero-copy">
+          <h2>Enter a premium reading room built for elegant, focused storytelling.</h2>
+          <p>
+            Browse curated books, sync favorites, and keep the shared library polished with
+            admin-only editing controls.
           </p>
         </div>
+        <blockquote class="quote-card">
+          <p id="quoteText"></p>
+          <footer id="quoteAuthor"></footer>
+        </blockquote>
+        <div class="status-bar">
+          <div class="sync-pill sync-neutral" id="backendStatusPill">Preview mode</div>
+          <p id="backendStatusText"></p>
+        </div>
+      </section>
 
-        <div class="quote-card">
-          <p class="quote-label">Reading spark</p>
-          <blockquote id="quoteText"></blockquote>
+      <section class="auth-panel glass-card">
+        <div class="auth-panel-header">
+          <p class="eyebrow">Welcome back</p>
+          <h2>Choose your access</h2>
+          <p class="auth-caption">User accounts are read-only. Admin access unlocks shared story editing.</p>
         </div>
 
-        <div class="login-stats">
-          <article class="mini-stat">
-            <strong>10+</strong>
-            <span>Curated stories</span>
-          </article>
-          <article class="mini-stat">
-            <strong>Editable</strong>
-            <span>Reader workspace</span>
-          </article>
-          <article class="mini-stat">
-            <strong>Synced</strong>
-            <span>Local saved progress</span>
-          </article>
-        </div>
-      </div>
-
-      <form class="login-form glass-inner" id="loginForm" autocomplete="on">
-        <div class="form-heading">
-          <p class="eyebrow" id="accessEyebrow">User Access</p>
-          <h2>Welcome back</h2>
-          <p id="accessDescription">Sign in as a user to read stories, browse favorites, and explore the library in read-only mode.</p>
+        <div class="mode-switch" id="modeSwitch">
+          <button class="choice-chip is-active" type="button" data-access-mode="user">User Login</button>
+          <button class="choice-chip" type="button" data-access-mode="admin">Admin Login</button>
         </div>
 
-        <div class="access-toggle" aria-label="Choose access mode">
-          <button type="button" class="filter-chip active" id="userAccessBtn" data-access-mode="user">User Login</button>
-          <button type="button" class="filter-chip" id="adminAccessBtn" data-access-mode="admin">Admin Login</button>
+        <form id="loginForm" class="login-form">
+          <label>
+            Username
+            <input id="usernameInput" name="username" type="text" autocomplete="username" required />
+          </label>
+          <label>
+            Password
+            <input id="passwordInput" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="primary-button" type="submit" id="submitButton">Enter library</button>
+        </form>
+
+        <div class="login-notes">
+          <div class="note-card" id="previewReadersCard">
+            <strong>Preview readers</strong>
+            <p><code>anaya</code>, <code>meera</code>, or <code>arjun</code> with password <code>library123</code>.</p>
+          </div>
+          <div class="note-card" id="adminHintCard">
+            <strong>Admin access</strong>
+            <p>Use the configured admin credentials for shared story editing.</p>
+          </div>
         </div>
+      </section>
+    </main>
 
-        <input type="hidden" id="accessModeInput" value="user">
+    <div id="toastRegion" class="toast-stack"></div>
 
-        <label class="input-group">
-          <span>Username</span>
-          <input type="text" id="usernameInput" name="username" placeholder="Enter your username" autocomplete="username" required>
-        </label>
-
-        <label class="input-group">
-          <span>Password</span>
-          <input type="password" id="passwordInput" name="password" placeholder="Enter your password" autocomplete="current-password" required>
-        </label>
-
-        <button type="submit" class="primary-btn wide-btn">Enter Library</button>
-
-        <p class="form-footnote">
-          User accounts can read only. Admin access is reserved for the site owner and unlocks editing across the shared library.
-        </p>
-      </form>
-    </section>
-  </main>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="supabase-config.js" defer></script>
-  <script src="site-core.js" defer></script>
-  <script src="auth-core.js" defer></script>
-  <script src="index.js" defer></script>
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="module" src="./index.js"></script>
+  </body>
 </html>
